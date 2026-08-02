@@ -1,0 +1,23 @@
+# Frontend dependencies and generated output
+src/frontend/node_modules/
+node_modules/
+src/frontend/.next/
+src/frontend/out/
+src/frontend/coverage/
+npm-debug.log*
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Local logs and environment files
+*.log
+src/frontend/.env.local
+
+# IDE and OS files
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
