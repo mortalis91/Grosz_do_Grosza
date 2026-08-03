@@ -44,10 +44,6 @@ div.flex.flex-wrap.gap-3.border-b.border-line.bg-white\/5.p-3
   margin-left: auto;
 }
 
-.transactions-filter-bars > div {
-  display: contents;
-}
-
 .transactions-filter-bars {
   position: relative;
   padding-right: 120px;

@@ -835,37 +835,15 @@ export function TransactionsList() {
             </div>
           </div>
         )}
-        <div className="transactions-filter-bars flex flex-wrap items-center gap-3 border-b border-line bg-white/5 p-3">
-          <div className="flex flex-wrap gap-3 border-b border-line bg-white/5 p-3">
-            <select
-              value={dateFilter}
-              onChange={(event) => setDateFilter(event.target.value)}
-              className="rounded-xl border border-line bg-panel px-3 py-2 text-sm"
-            >
-              <option value="current-month">Bieżący miesiąc</option>
-              <option value="previous-month">Poprzedni miesiąc</option>
-              <option value="current-year">Obecny rok</option>
-              <option value="previous-year">Poprzedni rok</option>
-              <option value="all">Wszystkie okresy</option>
-            </select>
+        <div className="transactions-filter-bars flex flex-wrap items-center gap-1 border-b border-line bg-white/5 p-3">
+            <FilterSelect value={dateFilter} onChange={setDateFilter} options={[{ value: "current-month", label: "Bieżący miesiąc" }, { value: "previous-month", label: "Poprzedni miesiąc" }, { value: "current-year", label: "Obecny rok" }, { value: "previous-year", label: "Poprzedni rok" }, { value: "all", label: "Wszystkie okresy" }]} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filtruj po opisie"
               className="rounded-xl border border-line bg-panel px-3 py-2 text-sm"
             />
-            <select
-              value={filterAccount}
-              onChange={(e) => setFilterAccount(e.target.value)}
-              className="rounded-xl border border-line bg-panel px-3 py-2 text-sm"
-            >
-              <option value="">Konto: wszystkie</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </select>
+            <FilterSelect value={filterAccount} onChange={setFilterAccount} options={[{ value: "", label: "Konto: wszystkie" }, ...accounts.map((account) => ({ value: account.id, label: account.name }))]} />
             <div ref={typeFilterRef} className="relative">
               <button
                 type="button"
@@ -911,23 +889,6 @@ export function TransactionsList() {
                 </div>
               )}
             </div>
-            <label className="flex items-center gap-1 text-sm text-muted">
-              Pokaż
-              <select
-                value={pageSize}
-                onChange={(event) => setPageSize(Number(event.target.value))}
-                className="rounded-xl border border-line bg-panel px-3 py-2 text-white"
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              <option value={100}>100</option>
-              <option value={200}>200</option>
-              <option value={500}>500</option>
-              </select>
-            </label>
-          </div>
-          <div className="flex flex-wrap gap-3 border-b border-line bg-white/5 p-3">
             <div ref={amountRef} className="relative">
               <button
                 type="button"
@@ -973,7 +934,7 @@ export function TransactionsList() {
                       }}
                       className="rounded-xl border border-line px-3 py-2 text-sm text-muted"
                     >
-                      WyczyLć
+                      Wyczyść
                     </button>
                     <button
                       type="button"
@@ -998,7 +959,6 @@ export function TransactionsList() {
                 compact
               />
             </div>
-          </div>
         </div>
         <table className="w-full min-w-[1100px] table-fixed border-collapse text-left text-sm">
           <colgroup>
@@ -1151,6 +1111,18 @@ export function TransactionsList() {
           >
             Następna <ChevronRight size={18} />
           </button>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            Pokaż
+            <select
+              value={pageSize}
+              onChange={(event) => setPageSize(Number(event.target.value))}
+              className="rounded-xl border border-line bg-panel px-3 py-2 text-white"
+            >
+              {[10, 25, 50, 100, 200, 500].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
     </div>
@@ -1165,10 +1137,23 @@ function StatusIcon({ status }: { status: string }) {
   return <CircleAlert size={13} className="text-amber-300" />;
 }
 
+function FilterSelect({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const selected = options.find((option) => option.value === value)?.label ?? "Wybierz";
+  return <div ref={ref} className="relative"><button type="button" onClick={() => setOpen((current) => !current)} className="inline-flex min-w-[160px] items-center justify-between gap-3 whitespace-nowrap rounded-xl border border-line bg-panel px-3 py-2 text-left text-sm hover:border-accent/60"><span className="truncate">{selected}</span>{open ? <ChevronUp size={15} className="shrink-0" /> : <ChevronDown size={15} className="shrink-0" />}</button>{open && <div className="absolute left-0 top-full z-40 mt-1 min-w-full overflow-hidden rounded-xl border border-line bg-panel p-1 shadow-2xl">{options.map((option) => <button type="button" key={option.value} onClick={() => { onChange(option.value); setOpen(false); }} className="flex w-full items-center justify-between whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm hover:bg-white/10"><span>{option.label}</span>{option.value === value && <Check size={15} className="text-accent" />}</button>)}</div>}</div>;
+}
+
 function translateTransactionType(type: string) {
   const labels: Record<string, string> = {
     Expense: "Wydatek",
-    Income: "PrzychAld",
+    Income: "Przychód",
     Transfer: "Przelew",
     Manual: "Ręczna",
     Imported: "Importowana",
@@ -1232,7 +1217,7 @@ export function CategoryPicker({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between rounded-xl border border-line bg-panel px-3 py-2 text-left text-sm transition hover:border-accent/70"
+        className="flex min-w-[160px] items-center justify-between rounded-xl border border-line bg-panel px-3 py-2 text-left text-sm transition hover:border-accent/70"
       >
         <span className="flex items-center gap-2 truncate">
           <span className="text-lg leading-none">
