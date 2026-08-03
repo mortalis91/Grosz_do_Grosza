@@ -15,6 +15,7 @@ import { getAccounts } from "@/lib/accounts-api";
 import { getTransactions } from "@/lib/transactions-api";
 import { clearToken, readToken } from "@/lib/session";
 import { authFetch } from "@/lib/auth-fetch";
+import { ArrowLeft, Database, Save, Settings, Trash2, TriangleAlert, UserRound, UserX, X } from "lucide-react";
 
 function userIdFromToken(token: string) {
   try {
@@ -234,7 +235,7 @@ export default function SettingsPage() {
                       title="Usuń regułę"
                       className="rounded-lg border border-rose-400/40 px-2 py-1 text-rose-300 hover:bg-rose-400/10"
                     >
-                      🗑
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 );

@@ -10,6 +10,7 @@ import {
 } from "@/lib/accounts-api";
 import { getDashboardSummary } from "@/lib/api";
 import { readToken } from "@/lib/session";
+import { CreditCard, Landmark, Pencil, PiggyBank, Plus, Trash2 } from "lucide-react";
 
 const assetTypes = [
   ["Bank", "🏦 Konta bankowe"],
@@ -105,7 +106,7 @@ export function AccountsList() {
           />
         </label>
         <label className="text-sm text-muted">
-          Typ aktywów
+          <span className="inline-flex items-center gap-2"><Landmark size={15} /> Typ aktywów</span>
           <select
             value={form.accountType}
             onChange={(event) =>
@@ -245,7 +246,7 @@ export function AccountsList() {
                       className="rounded-lg border border-rose-400/40 px-3 py-1 text-xs text-rose-300"
                       onClick={() => handleDelete(account.id)}
                     >
-                      Usuń
+                      <Trash2 size={15} /> Usuń
                     </button>
                   </div>
                 </td>

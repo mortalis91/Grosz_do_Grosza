@@ -7,12 +7,16 @@ import { readToken } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
 import { TransactionTable } from "@/features/transactions/transaction-table";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 
 export function DashboardClient() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [ready, setReady] = useState(false);
   const [period, setPeriod] = useState(() => new Date());
+  const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
+  const [chartRange, setChartRange] = useState("3 mies.");
+  const monthNames = ["Sty", "Lut", "Mar", "Kwi", "Maj", "Cze", "Lip", "Sie", "Wrz", "Paź", "Lis", "Gru"];
 
   useEffect(() => {
     const token = readToken();
@@ -20,11 +24,7 @@ export function DashboardClient() {
       router.replace("/auth");
       return;
     }
-    getDashboardSummary(
-      token,
-      period.getFullYear(),
-      period.getMonth() + 1,
-    ).then((result) => {
+    getDashboardSummary(token, period.getFullYear(), period.getMonth() + 1).then((result) => {
       setDashboard(result);
       setReady(true);
     });
@@ -33,7 +33,7 @@ export function DashboardClient() {
   const summary = dashboard
     ? [
         {
-          label: "Saldo",
+          label: "Całkowity bilans",
           value: formatCurrency(dashboard.balance),
           delta: "Stan bieżący",
           tone: "neutral" as const,
@@ -83,20 +83,41 @@ export function DashboardClient() {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel/80 p-4">
           <h2 className="font-semibold">Podsumowanie miesiąca</h2>
-          <input
-            type="month"
-            value={`${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, "0")}`}
-            onChange={(event) =>
-              setPeriod(new Date(`${event.target.value}-01`))
-            }
-            className="rounded-xl border border-line bg-panel px-3 py-2"
-          />
+          <div className="relative inline-flex items-center gap-2 rounded-xl border border-line bg-panel p-1">
+            <button
+              type="button"
+              onClick={() => setPeriod(new Date(period.getFullYear(), period.getMonth() - 1, 1))}
+              className="rounded-lg p-2 text-muted transition hover:bg-white/10 hover:text-white"
+              aria-label="Poprzedni miesiąc"
+              title="Poprzedni miesiąc"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <button type="button" onClick={() => setPeriodPickerOpen((open) => !open)} className="flex min-w-40 items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-medium capitalize hover:bg-white/10">
+              <CalendarDays size={17} className="text-accent" />
+              {period.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriod(new Date(period.getFullYear(), period.getMonth() + 1, 1))}
+              className="rounded-lg p-2 text-muted transition hover:bg-white/10 hover:text-white"
+              aria-label="Następny miesiąc"
+              title="Następny miesiąc"
+            >
+              <ChevronRight size={17} />
+            </button>
+            {periodPickerOpen && <div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-line bg-panel p-4 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between"><button type="button" onClick={() => setPeriod(new Date(period.getFullYear() - 1, period.getMonth(), 1))} className="rounded-lg p-2 text-muted hover:bg-white/10 hover:text-white" aria-label="Poprzedni rok"><ChevronLeft size={18} /></button><strong>{period.getFullYear()}</strong><button type="button" onClick={() => setPeriod(new Date(period.getFullYear() + 1, period.getMonth(), 1))} className="rounded-lg p-2 text-muted hover:bg-white/10 hover:text-white" aria-label="Następny rok"><ChevronRight size={18} /></button></div>
+              <div className="grid grid-cols-3 gap-2">{monthNames.map((name, index) => <button key={name} type="button" onClick={() => { setPeriod(new Date(period.getFullYear(), index, 1)); setPeriodPickerOpen(false); }} className={`rounded-lg px-3 py-2 text-sm transition ${period.getMonth() === index ? "bg-accent text-black" : "text-muted hover:bg-white/10 hover:text-white"}`}>{name}</button>)}</div>
+            </div>}
+          </div>
         </div>{" "}
         <section className="grid gap-4 md:grid-cols-3">
           {summary.map((item) => (
             <StatCard key={item.label} {...item} />
           ))}
         </section>
+        <IncomeExpenseChart income={dashboard?.income ?? 0} expenses={Math.abs(dashboard?.expenses ?? 0)} range={chartRange} onRangeChange={setChartRange} />
         <section className="grid gap-4 xl:grid-cols-[2fr_1fr]">
           <div className="rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
             <div className="mb-5 flex items-center justify-between">
@@ -116,6 +137,23 @@ export function DashboardClient() {
         </section>
       </section>
     </AppShell>
+  );
+}
+
+function IncomeExpenseChart({ income, expenses, range, onRangeChange }: { income: number; expenses: number; range: string; onRangeChange: (range: string) => void }) {
+  const max = Math.max(income, expenses, 1);
+  const ranges = ["1d", "3d", "1 tyg.", "2 tyg.", "1 mies.", "2 mies.", "3 mies.", "6 mies.", "1 rok", "Wszystko"];
+  return (
+    <section className="rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Przychody vs Wydatki</h2>
+        <div className="flex gap-4 text-sm text-muted"><span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-400" />Przychody</span><span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-rose-400" />Wydatki</span></div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">{ranges.map((item) => <button key={item} type="button" onClick={() => onRangeChange(item)} className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${range === item ? "border-accent bg-accent text-black" : "border-line bg-white/5 text-muted hover:border-accent/50 hover:text-white"}`}>{item}</button>)}</div>
+      <div className="mt-6 flex h-48 items-end justify-center gap-12 border-b border-line px-6">
+        {[{ label: "Przychody", value: income, color: "bg-emerald-400" }, { label: "Wydatki", value: expenses, color: "bg-rose-400" }].map((item) => <div key={item.label} className="flex h-full w-24 flex-col items-center justify-end gap-2"><span className="text-xs text-muted">{formatCurrency(item.value)}</span><div className={`w-14 rounded-t-xl ${item.color}`} style={{ height: `${Math.max(6, item.value / max * 150)}px` }} /><span className="pb-3 text-sm text-muted">{item.label}</span></div>)}
+      </div>
+    </section>
   );
 }
 

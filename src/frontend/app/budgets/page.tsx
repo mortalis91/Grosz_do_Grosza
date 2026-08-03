@@ -10,6 +10,7 @@ import {
   type BudgetItem,
 } from "@/lib/budgets-api";
 import { CategoryPicker } from "@/features/transactions/transactions-list";
+import { CalendarDays, Plus, Trash2 } from "lucide-react";
 
 export default function BudgetsPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
@@ -152,7 +153,7 @@ export default function BudgetsPage() {
                     onClick={() => remove(item.id)}
                     className="rounded-lg border border-rose-400/40 px-3 py-1 text-xs text-rose-300"
                   >
-                    Usuń
+                    <Trash2 size={15} /> Usuń
                   </button>
                 </div>
               );

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { authFetch } from "@/lib/auth-fetch";
+import { MoreHorizontal, Plus, Save, Trash2, X } from "lucide-react";
 
 type Category = {
   id: string;
@@ -321,7 +322,7 @@ export default function CategoriesPage() {
                   onClick={() => setEditingGroup({ ...group })}
                   className="text-lg text-muted hover:text-white"
                 >
-                  •••
+                  <MoreHorizontal size={18} />
                 </button>
               </div>
               <button
@@ -348,7 +349,7 @@ export default function CategoriesPage() {
                       onClick={() => removeChild(child.id)}
                       className="text-base text-muted hover:text-rose-400"
                     >
-                      🗑
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 ))}
@@ -400,7 +401,7 @@ export default function CategoriesPage() {
                     onClick={saveGroup}
                     className="rounded-xl bg-accent px-4 py-2 text-black"
                   >
-                    Zapisz
+                    <Save size={15} /> Zapisz
                   </button>
                 </div>
               </div>

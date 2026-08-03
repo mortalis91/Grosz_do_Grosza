@@ -4,6 +4,7 @@ import type React from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveToken } from "@/lib/session";
+import { Eye, EyeOff, LogIn, UserPlus } from "lucide-react";
 
 type Mode = "login" | "register";
 const baseUrl =

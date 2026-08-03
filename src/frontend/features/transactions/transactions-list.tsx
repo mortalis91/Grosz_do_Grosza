@@ -870,19 +870,20 @@ export function TransactionsList() {
               <button
                 type="button"
                 onClick={() => setTypeFilterOpen(!typeFilterOpen)}
-                className="rounded-xl border border-line bg-panel px-3 py-2 text-sm"
+                className="inline-flex min-w-[170px] items-center justify-between gap-2 whitespace-nowrap rounded-xl border border-line bg-panel px-3 py-2 text-sm"
               >
-                Typ:{" "}
-                {selectedTypeFilters.length ? "Transakcje..." : "wszystkie"}{" "}
-                {selectedTypeFilters.length > 1 && (
-                  <span className="ml-2 rounded-full bg-white/10 px-2">
+                <span className="truncate">
+                  Typ: {selectedTypeFilters.length ? "Transakcje..." : "wszystkie"}
+                  {selectedTypeFilters.length > 1 && (
+                    <span className="ml-2 rounded-full bg-white/10 px-2">
                     +{selectedTypeFilters.length - 1}
-                  </span>
-                )}{" "}
+                    </span>
+                  )}
+                </span>
                 {typeFilterOpen ? (
-                  <ChevronUp size={15} />
+                  <ChevronUp size={15} className="shrink-0" />
                 ) : (
-                  <ChevronDown size={15} />
+                  <ChevronDown size={15} className="shrink-0" />
                 )}
               </button>
               {typeFilterOpen && (
@@ -920,7 +921,9 @@ export function TransactionsList() {
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
-                <option value={100}>100</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
               </select>
             </label>
           </div>

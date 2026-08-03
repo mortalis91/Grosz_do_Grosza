@@ -94,6 +94,37 @@ Frontend korzysta domyślnie z API pod `http://localhost:5000`. Można zmienić 
 adres, ustawiając zmienną środowiskową `NEXT_PUBLIC_BACKEND_API_URL` w pliku
 `src/frontend/.env.local`.
 
+## Ikony interfejsu
+
+Frontend korzysta z biblioteki `lucide-react`. Wszystkie nowe przyciski i
+kontrolki interfejsu powinny używać ikon Lucide zamiast znaków tekstowych,
+emoji lub ręcznie rysowanych symboli.
+
+Przykład:
+
+```tsx
+import { Pencil, Trash2 } from "lucide-react";
+
+<button type="button" aria-label="Edytuj" title="Edytuj">
+  <Pencil size={16} />
+  Edytuj
+</button>
+
+<button type="button" aria-label="Usuń" title="Usuń">
+  <Trash2 size={16} />
+</button>
+```
+
+Zasady:
+
+- stosuj `16–18 px` dla ikon w przyciskach i filtrach oraz `20–22 px` dla
+  nawigacji,
+- przycisk zawierający wyłącznie ikonę musi mieć `aria-label` i `title`,
+- używaj ikon z jednego zestawu: `ChevronDown`, `ChevronUp`, `Search`,
+  `ArrowDownUp`, `Check`, `X`, `Trash2`, `Pencil`, `Tag` i podobnych,
+- nie dodawaj nowych symboli typu `⌄`, `↕`, `🗑` ani emoji jako zamienników
+  ikon interfejsu.
+
 ### Testy backendu
 
 Testy można uruchomić z katalogu głównego poleceniem:
