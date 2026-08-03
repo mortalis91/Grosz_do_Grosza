@@ -14,7 +14,9 @@ Personal Finance Manager built with:
 - Transactions support manual entry, CSV import, categorization, filtering, sorting, editing, soft deletion and bulk actions.
 - Categories support groups, subcategories, icons, colors, editing, alphabetical ordering and deletion.
 - Dashboard supports monthly summaries, annual charts and PLN conversion for non-PLN balances.
+- The `Przychody vs Wydatki` chart supports day, week, month, year and all-time ranges. Transactions marked as `Ignored` are excluded from its calculations.
 - Import diagnostics report imported rows, duplicates and failed rows.
+- CSV import requires selecting an account first; after import the selected file name is shown and a detailed `.txt` log can be downloaded.
 - Budgets support monthly category planning, comments, actual spending, remaining amounts and deletion.
 
 Detailed functional requirements and current behavior are documented in [`REQUIREMENTS.md`](REQUIREMENTS.md).
@@ -94,7 +96,41 @@ Frontend korzysta domyślnie z API pod `http://localhost:5000`. Można zmienić 
 adres, ustawiając zmienną środowiskową `NEXT_PUBLIC_BACKEND_API_URL` w pliku
 `src/frontend/.env.local`.
 
+### Kontrole jakości kodu
+
+Polecenia uruchamiające sprawdzanie i formatowanie frontendu:
+
+```bash
+cd src/frontend
+npm run lint
+npm run lint:fix
+npm run format
+npm run build
+```
+
+### Okresy i kategorie transakcji
+
+W zakładce **Transakcje** filtr okresu zawiera gotowe zakresy oraz opcję
+**Inny okres**, która otwiera osobne okno wyboru daty początkowej i końcowej.
+Filtr kategorii pozwala wybrać **Bez kategorii** albo **Wszystkie kategorie**.
+Kategorie i podkategorie mogą posiadać ikony widoczne w filtrach, pickerach
+i przy edycji transakcji.
+
 ## Ikony interfejsu
+
+## Usuwanie konta
+
+Usunięcie konta w zakładce **Konta** jest operacją kaskadową. Wraz z kontem
+usuwane są wszystkie przypisane do niego transakcje oraz powiązane partie
+importów. Operacja jest trwała — jeśli chcesz zachować historię, użyj opcji
+archiwizacji konta zamiast jego usuwania.
+
+### Usuwanie wszystkich transakcji
+
+W trybie **Edytuj transakcje** dostępna jest akcja **Usuń wszystkie transakcje**.
+Przed wykonaniem operacji wyświetla się osobny monit bezpieczeństwa. Aby ją
+zatwierdzić, należy wpisać `USUŃ`. Operacja trwale usuwa wszystkie transakcje
+bieżącego użytkownika i nie można jej cofnąć.
 
 Frontend korzysta z biblioteki `lucide-react`. Wszystkie nowe przyciski i
 kontrolki interfejsu powinny używać ikon Lucide zamiast znaków tekstowych,

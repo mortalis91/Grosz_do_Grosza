@@ -30,7 +30,7 @@ export async function createAccount(payload: {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to create account");
+    throw new Error((await response.text()) || "Nie udało się utworzyć konta.");
   }
 
   return (await response.json()) as AccountItem;

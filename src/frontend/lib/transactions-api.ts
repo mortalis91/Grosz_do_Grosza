@@ -78,6 +78,13 @@ export async function archiveTransaction(id: string) {
   }
 }
 
+export async function deleteAllTransactions() {
+  const response = await authFetch("/api/v1/transactions/all", {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Nie udało się usunąć transakcji.");
+}
+
 export async function markTransactionIrrelevant(id: string) {
   const response = await authFetch(`/api/v1/transactions/${id}/irrelevant`, {
     method: "POST",

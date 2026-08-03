@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getDashboardSummary, type DashboardSummary } from "@/lib/api";
+import { getTransactions, type TransactionItem } from "@/lib/transactions-api";
 import { readToken } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
 import { StatCard } from "@/components/stat-card";
@@ -12,6 +13,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 export function DashboardClient() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [ready, setReady] = useState(false);
   const [period, setPeriod] = useState(() => new Date());
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
@@ -24,8 +26,12 @@ export function DashboardClient() {
       router.replace("/auth");
       return;
     }
-    getDashboardSummary(token, period.getFullYear(), period.getMonth() + 1).then((result) => {
+    Promise.all([
+      getDashboardSummary(token, period.getFullYear(), period.getMonth() + 1),
+      getTransactions(1, 5000),
+    ]).then(([result, loadedTransactions]) => {
       setDashboard(result);
+      setTransactions(loadedTransactions);
       setReady(true);
     });
   }, [router, period]);
@@ -74,7 +80,7 @@ export function DashboardClient() {
 
   return (
     <AppShell>
-      <section className="space-y-6 rounded-3xl border border-line bg-panel/80 p-6">
+      <section className="min-w-0 space-y-6 rounded-3xl border border-line bg-panel/80 p-6">
         <div>
           <h1 className="text-3xl font-semibold">Dashboard</h1>
           <p className="mt-1 text-sm text-muted">
@@ -117,22 +123,23 @@ export function DashboardClient() {
             <StatCard key={item.label} {...item} />
           ))}
         </section>
-        <IncomeExpenseChart income={dashboard?.income ?? 0} expenses={Math.abs(dashboard?.expenses ?? 0)} range={chartRange} onRangeChange={setChartRange} />
-        <section className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-          <div className="rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Ostatnie operacje</h2>
-            </div>
-            <TransactionTable />
+        <section className="grid min-w-0 gap-4 xl:grid-cols-[2fr_1fr]">
+          <div className="min-w-0">
+            <IncomeExpenseChart transactions={transactions} range={chartRange} onRangeChange={setChartRange} />
           </div>
-
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
+          <div className="min-w-0 xl:row-span-2">
+            <div className="h-full rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
               <h2 className="text-lg font-semibold">Największe wydatki</h2>
               <ExpenseDonutChart
                 items={dashboard?.topSpendingCategories ?? []}
               />
             </div>
+          </div>
+          <div className="min-w-0 rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Ostatnie operacje</h2>
+            </div>
+            <TransactionTable />
           </div>
         </section>
       </section>
@@ -140,18 +147,67 @@ export function DashboardClient() {
   );
 }
 
-function IncomeExpenseChart({ income, expenses, range, onRangeChange }: { income: number; expenses: number; range: string; onRangeChange: (range: string) => void }) {
-  const max = Math.max(income, expenses, 1);
+function IncomeExpenseChart({ transactions, range, onRangeChange }: { transactions: TransactionItem[]; range: string; onRangeChange: (range: string) => void }) {
   const ranges = ["1d", "3d", "1 tyg.", "2 tyg.", "1 mies.", "2 mies.", "3 mies.", "6 mies.", "1 rok", "Wszystko"];
+  const rangeConfig: Record<string, { days: number | null; months?: number; unit: "day" | "month" }> = {
+    "1d": { days: 1, unit: "day" }, "3d": { days: 3, unit: "day" }, "1 tyg.": { days: 7, unit: "day" }, "2 tyg.": { days: 14, unit: "day" },
+    "1 mies.": { days: null, months: 1, unit: "month" }, "2 mies.": { days: null, months: 2, unit: "month" }, "3 mies.": { days: null, months: 3, unit: "month" }, "6 mies.": { days: null, months: 6, unit: "month" }, "1 rok": { days: null, months: 12, unit: "month" }, "Wszystko": { days: null, unit: "month" },
+  };
+  const config = rangeConfig[range] ?? rangeConfig["3 mies."];
+  const end = new Date();
+  const start = config.months
+    ? new Date(end.getFullYear(), end.getMonth() - config.months + 1, 1)
+    : config.days
+      ? new Date(end.getTime() - (config.days - 1) * 86400000)
+      : new Date(Math.min(...transactions.map((item) => new Date(item.occurredAt).getTime()), end.getTime()));
+  const buckets = new Map<string, { label: string; income: number; expenses: number; time: number }>();
+  if (config.unit === "day" && config.days) {
+    for (let index = 0; index < config.days; index += 1) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      buckets.set(date.toISOString().slice(0, 10), { label: date.toLocaleDateString("pl-PL", { day: "numeric", month: "short" }), income: 0, expenses: 0, time: date.getTime() });
+    }
+  }
+  transactions.forEach((item) => {
+    // Transakcje oznaczone jako nieistotne nie wpływają na wykres finansowy.
+    if (item.status === "Ignored") return;
+    const date = new Date(item.occurredAt);
+    if (date < start || date > end) return;
+    const bucketDate = new Date(date);
+    if (config.unit === "month") bucketDate.setDate(1);
+    const key = config.unit === "month" ? `${bucketDate.getFullYear()}-${bucketDate.getMonth()}` : bucketDate.toISOString().slice(0, 10);
+    const label = config.unit === "month" ? bucketDate.toLocaleDateString("pl-PL", { month: "long", year: "numeric" }) : bucketDate.toLocaleDateString("pl-PL", { day: "numeric", month: "short" });
+    const bucket = buckets.get(key) ?? { label, income: 0, expenses: 0, time: bucketDate.getTime() };
+    if (item.amount >= 0) bucket.income += item.amount; else bucket.expenses += Math.abs(item.amount);
+    buckets.set(key, bucket);
+  });
+  const points = Array.from(buckets.values()).sort((a, b) => a.time - b.time);
+  const dataMax = Math.max(...points.flatMap((point) => [point.income, point.expenses]), 1);
+  const roughStep = dataMax / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalizedStep = roughStep / magnitude;
+  const niceStep = (normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 5 ? 5 : 10) * magnitude;
+  const chartMax = Math.ceil(dataMax / niceStep) * niceStep;
+  const yTicks = Array.from({ length: 6 }, (_, index) => chartMax - index * niceStep);
   return (
-    <section className="rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
+    <section className="min-w-0 overflow-hidden rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Przychody vs Wydatki</h2>
         <div className="flex gap-4 text-sm text-muted"><span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-400" />Przychody</span><span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-rose-400" />Wydatki</span></div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{ranges.map((item) => <button key={item} type="button" onClick={() => onRangeChange(item)} className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${range === item ? "border-accent bg-accent text-black" : "border-line bg-white/5 text-muted hover:border-accent/50 hover:text-white"}`}>{item}</button>)}</div>
-      <div className="mt-6 flex h-48 items-end justify-center gap-12 border-b border-line px-6">
-        {[{ label: "Przychody", value: income, color: "bg-emerald-400" }, { label: "Wydatki", value: expenses, color: "bg-rose-400" }].map((item) => <div key={item.label} className="flex h-full w-24 flex-col items-center justify-end gap-2"><span className="text-xs text-muted">{formatCurrency(item.value)}</span><div className={`w-14 rounded-t-xl ${item.color}`} style={{ height: `${Math.max(6, item.value / max * 150)}px` }} /><span className="pb-3 text-sm text-muted">{item.label}</span></div>)}
+      <div className="mt-6 flex min-w-0">
+        <div className="flex h-56 w-20 shrink-0 flex-col justify-between border-r border-line pr-2 text-right text-[11px] text-muted">
+          {yTicks.map((tick) => <span key={tick}>{formatAxisValue(tick)}</span>)}
+        </div>
+        <div className="min-w-0 flex-1 overflow-x-auto">
+          <div className="relative flex h-56 items-end gap-2 border-b border-line px-4" style={{ minWidth: `${Math.max(720, points.length * 64)}px` }}>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-40">
+              {yTicks.map((_, index) => <div key={index} className="absolute inset-x-0 border-t border-line/70" style={{ top: `${index / Math.max(yTicks.length - 1, 1) * 100}%` }} />)}
+            </div>
+            {points.map((point) => <div key={`${point.time}-${point.label}`} className="flex min-w-16 flex-1 flex-col items-center justify-end gap-1"><div className="flex h-40 items-end gap-1"><div className="w-3 rounded-t bg-emerald-400" style={{ height: `${Math.max(point.income ? 3 : 0, point.income / chartMax * 140)}px` }} /><div className="w-3 rounded-t bg-rose-400" style={{ height: `${Math.max(point.expenses ? 3 : 0, point.expenses / chartMax * 140)}px` }} /></div><span className="max-w-20 truncate text-[10px] text-muted">{point.label}</span></div>)}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -169,8 +225,8 @@ function ExpenseDonutChart({
   let progress = 0;
 
   return (
-    <div className="mt-5 grid gap-6 sm:grid-cols-[190px_1fr] sm:items-center">
-      <div className="relative mx-auto h-48 w-48">
+    <div className="mt-5 flex flex-col gap-6">
+      <div className="relative mx-auto h-48 w-48 shrink-0">
         <svg
           viewBox="0 0 140 140"
           className="h-full w-full -rotate-90"
@@ -221,7 +277,7 @@ function ExpenseDonutChart({
                 className="h-3 w-3 shrink-0 rounded-full"
                 style={{ backgroundColor: colors[index % colors.length] }}
               />
-              <span className="truncate">{item.categoryName}</span>
+              <span className="break-words">{item.categoryName}</span>
             </span>
             <span className="shrink-0 text-right">
               <strong>{formatCurrency(item.amount)}</strong>
@@ -305,4 +361,11 @@ function formatCurrency(value: number) {
     currency: "PLN",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatAxisValue(value: number) {
+  if (Math.abs(value) >= 1000) {
+    return `${new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 1 }).format(value / 1000)} tys. zł`;
+  }
+  return `${new Intl.NumberFormat("pl-PL", { maximumFractionDigits: 0 }).format(value)} zł`;
 }

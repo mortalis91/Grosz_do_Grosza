@@ -94,7 +94,7 @@ export function AppShell({
       </div>
       <div className="mx-auto grid max-w-[1900px] gap-3 px-3 pb-3 lg:grid-cols-[220px_1fr] lg:px-3 lg:pb-4">
         <Sidebar />
-        <main className="space-y-6">{children}</main>
+        <main className="min-w-0 space-y-6">{children}</main>
       </div>
     </div>
   );

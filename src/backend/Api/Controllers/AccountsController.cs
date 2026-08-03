@@ -128,6 +128,7 @@ public sealed class AccountsController : ControllerBase
             return NotFound();
         }
 
+        // Usunięcie konta usuwa również jego historię transakcji i importów.
         _dbContext.Entry(account).Property(x => x.IsArchived).CurrentValue = true;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
@@ -140,7 +141,15 @@ public sealed class AccountsController : ControllerBase
         if (!userId.HasValue) return Unauthorized();
         var account = await _dbContext.Accounts.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, cancellationToken);
         if (account is null) return NotFound();
-        _dbContext.Entry(account).Property(x => x.IsArchived).CurrentValue = true;
+        var transactions = await _dbContext.Transactions
+            .Where(x => x.AccountId == account.Id && x.UserId == userId.Value)
+            .ToListAsync(cancellationToken);
+        var importBatches = await _dbContext.ImportBatches
+            .Where(x => x.AccountId == account.Id && x.UserId == userId.Value)
+            .ToListAsync(cancellationToken);
+        _dbContext.Transactions.RemoveRange(transactions);
+        _dbContext.ImportBatches.RemoveRange(importBatches);
+        _dbContext.Accounts.Remove(account);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }

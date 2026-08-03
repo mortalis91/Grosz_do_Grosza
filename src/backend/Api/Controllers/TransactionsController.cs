@@ -182,6 +182,20 @@ public sealed class TransactionsController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("all")]
+    public async Task<IActionResult> DeleteAll(CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        if (!userId.HasValue) return Unauthorized();
+
+        var transactions = await _dbContext.Transactions
+            .Where(x => x.UserId == userId.Value)
+            .ToListAsync(cancellationToken);
+        _dbContext.Transactions.RemoveRange(transactions);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
