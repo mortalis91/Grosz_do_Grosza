@@ -17,4 +17,5 @@ public sealed record TransactionUpsertRequest(
     Guid? CategoryId,
     string TransactionType,
     string? ReferenceNumber = null,
-    string? ExternalTransactionId = null);
+    string? ExternalTransactionId = null,
+    Guid? RefundTransactionId = null);

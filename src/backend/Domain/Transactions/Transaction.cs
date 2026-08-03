@@ -23,6 +23,7 @@ public sealed class Transaction : AggregateRoot
     public bool IsReconciled { get; private set; }
     public string? ReferenceNumber { get; private set; }
     public string? ExternalTransactionId { get; private set; }
+    public Guid? RefundTransactionId { get; private set; }
 
     private Transaction()
     {

@@ -18,6 +18,7 @@ Personal Finance Manager built with:
 - Import diagnostics report imported rows, duplicates and failed rows.
 - CSV import requires selecting an account first; after import the selected file name is shown and a detailed `.txt` log can be downloaded.
 - Budgets support monthly category planning, comments, actual spending, remaining amounts and deletion.
+- Expenses can be linked to income transactions representing refunds.
 
 Detailed functional requirements and current behavior are documented in [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
@@ -117,6 +118,23 @@ Kategorie i podkategorie mogą posiadać ikony widoczne w filtrach, pickerach
 i przy edycji transakcji.
 
 ## Ikony interfejsu
+
+## Powiązanie wydatku ze zwrotem
+
+Podczas edycji transakcji typu **Wydatek** można użyć pola **Połącz ze
+zwrotem** i wskazać transakcję typu **Przychód**. Powiązanie jest zapisywane
+na wydatku i można je usunąć, wybierając opcję **Brak powiązania**.
+
+Kwoty źródłowych transakcji nie są zmieniane. Zwrot wpływa na koszt efektywny:
+
+```text
+koszt efektywny = kwota wydatku + kwota zwrotu
+```
+
+Przykład: wydatek `-879,97 PLN` i zwrot `+529,98 PLN` dają koszt efektywny
+`-349,99 PLN`. Saldo konta nadal korzysta z pełnych, rzeczywistych operacji
+bankowych. API dodatkowo sprawdza, że zwrot jest przychodem tego samego
+użytkownika i nie jest tą samą transakcją.
 
 ## Usuwanie konta
 

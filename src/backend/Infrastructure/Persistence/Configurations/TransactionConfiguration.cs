@@ -24,5 +24,7 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
         builder.HasIndex(x => new { x.UserId, x.AccountId, x.OccurredAt });
         builder.HasIndex(x => new { x.UserId, x.CategoryId, x.OccurredAt });
         builder.HasIndex(x => new { x.UserId, x.ExternalTransactionId });
+        builder.HasIndex(x => x.RefundTransactionId).IsUnique();
+        builder.HasOne<Transaction>().WithMany().HasForeignKey(x => x.RefundTransactionId).OnDelete(DeleteBehavior.SetNull);
     }
 }

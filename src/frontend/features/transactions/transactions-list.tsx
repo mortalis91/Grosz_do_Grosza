@@ -20,6 +20,8 @@ import {
   Tag,
   Trash2,
   X,
+  Split,
+  Plus,
 } from 'lucide-react';
 import { getAccounts, type AccountItem } from '@/lib/accounts-api';
 import { importBankCsv } from '@/lib/imports-api';
@@ -34,6 +36,7 @@ import {
   type TransactionItem,
   updateTransaction,
   updateTransactionCategory,
+  saveTransactionSplits,
 } from '@/lib/transactions-api';
 
 const emptyForm = {
@@ -53,6 +56,7 @@ const emptyForm = {
   transactionType: 'Manual',
   referenceNumber: '',
   externalTransactionId: '',
+  refundTransactionId: '',
 };
 
 export function TransactionsList() {
@@ -122,6 +126,10 @@ export function TransactionsList() {
   const [bulkCategoryId, setBulkCategoryId] = useState('');
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteAllConfirmation, setDeleteAllConfirmation] = useState('');
+  const [splitTransaction, setSplitTransaction] = useState<TransactionItem | null>(null);
+  const [splitItems, setSplitItems] = useState<Array<{ categoryId: string; amount: string; memo: string }>>([
+    { categoryId: '', amount: '', memo: '' }, { categoryId: '', amount: '', memo: '' },
+  ]);
   // Referencje służą do zamykania dropdownów po kliknięciu poza ich obszarem.
   const typeFilterRef = useRef<HTMLDivElement>(null);
   const amountRef = useRef<HTMLDivElement>(null);
@@ -177,6 +185,7 @@ export function TransactionsList() {
       transactionType: form.transactionType,
       referenceNumber: form.referenceNumber || null,
       externalTransactionId: form.externalTransactionId || null,
+      refundTransactionId: form.refundTransactionId || null,
     };
 
     if (editingId) {
@@ -210,11 +219,19 @@ export function TransactionsList() {
       transactionType: item.transactionType,
       referenceNumber: '',
       externalTransactionId: item.externalTransactionId ?? '',
+      refundTransactionId: item.refundTransactionId ?? '',
     });
   }
 
   async function handleArchive(id: string) {
     await archiveTransaction(id);
+    await refresh();
+  }
+  async function handleSaveSplit() {
+    if (!splitTransaction) return;
+    const items = splitItems.map((item) => ({ ...item, amount: Number(item.amount) }));
+    await saveTransactionSplits(splitTransaction.id, items);
+    setSplitTransaction(null);
     await refresh();
   }
   async function handleIrrelevant(id: string) {
@@ -636,6 +653,26 @@ export function TransactionsList() {
               onChange={(categoryId) => setForm({ ...form, categoryId })}
             />
           </label>
+          {editingId && form.direction === 'Expense' && (
+            <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
+              Połącz ze zwrotem
+              <select
+                value={form.refundTransactionId}
+                onChange={(event) => setForm({ ...form, refundTransactionId: event.target.value })}
+                className="rounded-xl border border-line bg-panel px-3 py-2 outline-none"
+              >
+                <option value="">Brak powiązania</option>
+                {items
+                  .filter((item) => item.transactionType === 'Income' && item.id !== editingId)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {new Date(item.occurredAt).toLocaleDateString('pl-PL')} · {item.description || 'Przychód'} · {item.amount.toFixed(2)} {item.currency}
+                    </option>
+                  ))}
+              </select>
+              <span className="text-xs text-muted">Zwrot pomniejsza koszt efektywny wydatku, ale nie zmienia kwot księgowych.</span>
+            </label>
+          )}
           <div className="md:col-span-4 flex gap-3">
             <button className="rounded-xl bg-accent px-4 py-2 text-black" type="submit">
               {editingId ? 'Update transaction' : 'Create transaction'}
@@ -990,6 +1027,19 @@ export function TransactionsList() {
             </div>
           </div>
         )}
+        {splitTransaction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-2xl rounded-2xl border border-line bg-panel p-5 shadow-2xl">
+              <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Podziel transakcję</h2><button type="button" onClick={() => setSplitTransaction(null)} aria-label="Zamknij"><X size={18} /></button></div>
+              <p className="mt-2 text-sm text-muted">Kwota transakcji: {Math.abs(splitTransaction.amount).toLocaleString('pl-PL', { style: 'currency', currency: splitTransaction.currency })}</p>
+              <div className="mt-5 space-y-3">
+                {splitItems.map((part, index) => <div key={index} className="grid gap-2 sm:grid-cols-[1fr_140px_1fr_auto]"><CategoryPicker categories={categories} value={part.categoryId} onChange={(value) => setSplitItems((current) => current.map((x, i) => i === index ? { ...x, categoryId: value } : x))} compact /><input type="number" min="0.01" step="0.01" value={part.amount} onChange={(event) => setSplitItems((current) => current.map((x, i) => i === index ? { ...x, amount: event.target.value } : x))} placeholder="Kwota" className="rounded-xl border border-line bg-panel px-3 py-2" /><input value={part.memo} onChange={(event) => setSplitItems((current) => current.map((x, i) => i === index ? { ...x, memo: event.target.value } : x))} placeholder="Opis" className="rounded-xl border border-line bg-panel px-3 py-2" /><button type="button" onClick={() => setSplitItems((current) => current.filter((_, i) => i !== index))} className="px-2 text-muted" aria-label="Usuń podtransakcję"><X size={16} /></button></div>)}
+              </div>
+              <button type="button" onClick={() => setSplitItems((current) => [...current, { categoryId: '', amount: '', memo: '' }])} className="mt-4 inline-flex items-center gap-1 text-sm text-accent"><Plus size={16} /> Dodaj podtransakcję</button>
+              <div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setSplitTransaction(null)} className="rounded-xl border border-line px-4 py-2 text-sm">Anuluj</button><button type="button" onClick={handleSaveSplit} disabled={splitItems.length < 2 || Math.abs(splitItems.reduce((sum, item) => sum + Number(item.amount || 0), 0) - Math.abs(splitTransaction.amount)) > 0.01} className="rounded-xl bg-accent px-4 py-2 text-sm text-black disabled:opacity-40">Zapisz podział</button></div>
+            </div>
+          </div>
+        )}
         <table className="w-full min-w-[1100px] table-fixed border-collapse text-left text-sm">
           <colgroup>
             <col className="w-[35px]" />
@@ -1084,6 +1134,7 @@ export function TransactionsList() {
                     >
                       <Pencil size={13} /> Edytuj
                     </button>
+                    {item.transactionType === 'Expense' && <button className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs" onClick={() => { setSplitTransaction(item); setSplitItems([{ categoryId: item.categoryId ?? '', amount: '', memo: '' }, { categoryId: '', amount: '', memo: '' }]); }}><Split size={13} /> Podziel</button>}
                     <button
                       className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs"
                       onClick={() => handleIrrelevant(item.id)}

@@ -14,7 +14,13 @@ export type TransactionItem = {
   categoryId?: string | null;
   transactionType: string;
   externalTransactionId?: string | null;
+  refundTransactionId?: string | null;
 };
+export type TransactionSplit = { id?: string; categoryId: string; amount: number; memo: string };
+export async function saveTransactionSplits(id: string, items: TransactionSplit[]) {
+  const response = await authFetch(`/api/v1/transactions/${id}/splits`, { method: "PUT", body: JSON.stringify({ items }) });
+  if (!response.ok) throw new Error("Nie udało się zapisać podziału transakcji.");
+}
 
 export async function getTransactions(page = 1, pageSize = 25) {
   const response = await authFetch(

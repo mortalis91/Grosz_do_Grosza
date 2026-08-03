@@ -123,11 +123,12 @@ export function DashboardClient() {
             <StatCard key={item.label} {...item} />
           ))}
         </section>
-        <section className="grid min-w-0 gap-4 xl:grid-cols-[2fr_1fr]">
+        <section className="grid min-w-0 gap-4">
           <div className="min-w-0">
             <IncomeExpenseChart transactions={transactions} range={chartRange} onRangeChange={setChartRange} />
           </div>
-          <div className="min-w-0 xl:row-span-2">
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+          <div className="min-w-0">
             <div className="h-full rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
               <h2 className="text-lg font-semibold">Największe wydatki</h2>
               <ExpenseDonutChart
@@ -141,6 +142,7 @@ export function DashboardClient() {
             </div>
             <TransactionTable />
           </div>
+          </div>
         </section>
       </section>
     </AppShell>
@@ -148,6 +150,7 @@ export function DashboardClient() {
 }
 
 function IncomeExpenseChart({ transactions, range, onRangeChange }: { transactions: TransactionItem[]; range: string; onRangeChange: (range: string) => void }) {
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
   const ranges = ["1d", "3d", "1 tyg.", "2 tyg.", "1 mies.", "2 mies.", "3 mies.", "6 mies.", "1 rok", "Wszystko"];
   const rangeConfig: Record<string, { days: number | null; months?: number; unit: "day" | "month" }> = {
     "1d": { days: 1, unit: "day" }, "3d": { days: 3, unit: "day" }, "1 tyg.": { days: 7, unit: "day" }, "2 tyg.": { days: 14, unit: "day" },
@@ -182,13 +185,18 @@ function IncomeExpenseChart({ transactions, range, onRangeChange }: { transactio
     buckets.set(key, bucket);
   });
   const points = Array.from(buckets.values()).sort((a, b) => a.time - b.time);
-  const dataMax = Math.max(...points.flatMap((point) => [point.income, point.expenses]), 1);
-  const roughStep = dataMax / 5;
-  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
-  const normalizedStep = roughStep / magnitude;
-  const niceStep = (normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 5 ? 5 : 10) * magnitude;
-  const chartMax = Math.ceil(dataMax / niceStep) * niceStep;
-  const yTicks = Array.from({ length: 6 }, (_, index) => chartMax - index * niceStep);
+  const dataMax = Math.max(...points.flatMap((point) => [point.income, point.expenses]), 0);
+  // Oś opiera się na maksimum z agregatów wybranego zakresu. Zaokrąglamy
+  // granicę tylko do pełnych tysięcy, aby pojedynczy zapas i "ładny" krok
+  // nie podbijały skali np. z 16 tys. do 40 tys. zł.
+  const chartMax = Math.max(1000, Math.ceil(dataMax / 1000) * 1000);
+  const yTicks = Array.from(
+    { length: chartMax / 1000 + 1 },
+    (_, index) => chartMax - index * 1000,
+  );
+  const chartMinWidth = Math.max(720, points.length * 64);
+  // Zakresy dzienne do dwóch tygodni mieszczą się bez przewijania.
+  const needsHorizontalScroll = points.length > 14;
   return (
     <section className="min-w-0 overflow-hidden rounded-3xl border border-line bg-panel/80 p-6 shadow-glow backdrop-blur">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -197,15 +205,15 @@ function IncomeExpenseChart({ transactions, range, onRangeChange }: { transactio
       </div>
       <div className="mt-4 flex flex-wrap gap-2">{ranges.map((item) => <button key={item} type="button" onClick={() => onRangeChange(item)} className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${range === item ? "border-accent bg-accent text-black" : "border-line bg-white/5 text-muted hover:border-accent/50 hover:text-white"}`}>{item}</button>)}</div>
       <div className="mt-6 flex min-w-0">
-        <div className="flex h-56 w-20 shrink-0 flex-col justify-between border-r border-line pr-2 text-right text-[11px] text-muted">
-          {yTicks.map((tick) => <span key={tick}>{formatAxisValue(tick)}</span>)}
+        <div className="flex h-[300px] w-20 shrink-0 flex-col justify-between border-r border-line pr-2 text-right text-[11px] text-muted">
+          {yTicks.map((tick) => <span key={tick}>{tick % 5000 === 0 || tick === chartMax || tick === 0 ? formatAxisValue(tick) : ""}</span>)}
         </div>
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <div className="relative flex h-56 items-end gap-2 border-b border-line px-4" style={{ minWidth: `${Math.max(720, points.length * 64)}px` }}>
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-40">
+        <div className={`min-w-0 flex-1 ${needsHorizontalScroll ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
+          <div className="relative flex h-[300px] items-end gap-2 border-b border-line px-4" style={{ minWidth: `${chartMinWidth}px` }}>
+            <div className="pointer-events-none absolute left-0 top-0 h-[260px]" style={{ width: `${Math.max(chartMinWidth, 1600)}px` }}>
               {yTicks.map((_, index) => <div key={index} className="absolute inset-x-0 border-t border-line/70" style={{ top: `${index / Math.max(yTicks.length - 1, 1) * 100}%` }} />)}
             </div>
-            {points.map((point) => <div key={`${point.time}-${point.label}`} className="flex min-w-16 flex-1 flex-col items-center justify-end gap-1"><div className="flex h-40 items-end gap-1"><div className="w-3 rounded-t bg-emerald-400" style={{ height: `${Math.max(point.income ? 3 : 0, point.income / chartMax * 140)}px` }} /><div className="w-3 rounded-t bg-rose-400" style={{ height: `${Math.max(point.expenses ? 3 : 0, point.expenses / chartMax * 140)}px` }} /></div><span className="max-w-20 truncate text-[10px] text-muted">{point.label}</span></div>)}
+            {points.map((point, index) => <div key={`${point.time}-${point.label}`} className="relative flex min-w-16 flex-1 flex-col items-center justify-end gap-1" onMouseEnter={() => setHoveredPoint(index)} onMouseLeave={() => setHoveredPoint(null)}><div className="flex h-[260px] items-end gap-1"><div className="w-3 rounded-t bg-emerald-400" style={{ height: `${Math.max(point.income ? 3 : 0, point.income / chartMax * 260)}px` }} /><div className="w-3 rounded-t bg-rose-400" style={{ height: `${Math.max(point.expenses ? 3 : 0, point.expenses / chartMax * 260)}px` }} /></div><span className="max-w-20 truncate text-[10px] text-muted">{point.label}</span>{hoveredPoint === index && <div className="pointer-events-none absolute bottom-8 z-20 min-w-36 -translate-x-1/2 rounded-lg border border-line bg-slate-900 px-3 py-2 text-left text-xs shadow-xl"><div className="mb-1 font-medium text-white">{point.label}</div><div className="text-emerald-300">Przychody: {formatCurrency(point.income)}</div><div className="text-rose-300">Wydatki: {formatCurrency(point.expenses)}</div></div>}</div>)}
           </div>
         </div>
       </div>

@@ -60,7 +60,8 @@ public sealed class TransactionsController : ControllerBase
                 x.CounterpartyName,
                 x.CategoryId,
                 x.TransactionType,
-                x.ExternalTransactionId))
+                x.ExternalTransactionId,
+                x.RefundTransactionId))
             .ToListAsync(cancellationToken);
 
         return Ok(items);
@@ -84,7 +85,8 @@ public sealed class TransactionsController : ControllerBase
                 x.CounterpartyName,
                 x.CategoryId,
                 x.TransactionType,
-                x.ExternalTransactionId))
+                x.ExternalTransactionId,
+                x.RefundTransactionId))
             .FirstOrDefaultAsync(cancellationToken);
 
         return item is null ? NotFound() : Ok(item);
@@ -134,7 +136,8 @@ public sealed class TransactionsController : ControllerBase
             transaction.CounterpartyName,
             transaction.CategoryId,
             transaction.TransactionType,
-            transaction.ExternalTransactionId);
+            transaction.ExternalTransactionId,
+            transaction.RefundTransactionId);
 
         return CreatedAtAction(nameof(GetById), new { id = transaction.Id }, result);
     }
@@ -152,6 +155,15 @@ public sealed class TransactionsController : ControllerBase
         if (transaction is null || transaction.UserId != userId.Value)
         {
             return NotFound();
+        }
+
+        if (request.RefundTransactionId.HasValue)
+        {
+            if (request.TransactionType != "Expense" || request.RefundTransactionId == id)
+                return BadRequest("Zwrot można przypisać wyłącznie do wydatku.");
+            var refund = await _dbContext.Transactions.FirstOrDefaultAsync(x => x.Id == request.RefundTransactionId && x.UserId == userId.Value, cancellationToken);
+            if (refund is null || refund.TransactionType != "Income")
+                return BadRequest("Wskazana transakcja nie jest przychodem użytkownika.");
         }
 
         _dbContext.Entry(transaction).CurrentValues.SetValues(new
@@ -175,7 +187,8 @@ public sealed class TransactionsController : ControllerBase
             transaction.IsSplit,
             transaction.IsReconciled,
             request.ReferenceNumber,
-            request.ExternalTransactionId
+            request.ExternalTransactionId,
+            RefundTransactionId = request.RefundTransactionId
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -194,6 +207,31 @@ public sealed class TransactionsController : ControllerBase
         _dbContext.Transactions.RemoveRange(transactions);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    [HttpGet("{id:guid}/splits")]
+    public async Task<ActionResult<IReadOnlyList<TransactionSplitItem>>> GetSplits(Guid id, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId(); if (!userId.HasValue) return Unauthorized();
+        var owns = await _dbContext.Transactions.AnyAsync(x => x.Id == id && x.UserId == userId.Value, cancellationToken);
+        if (!owns) return NotFound();
+        return Ok(await _dbContext.TransactionSplits.AsNoTracking().Where(x => x.TransactionId == id)
+            .Select(x => new TransactionSplitItem(x.Id, x.CategoryId, x.Amount, x.Memo)).ToListAsync(cancellationToken));
+    }
+
+    [HttpPut("{id:guid}/splits")]
+    public async Task<IActionResult> SaveSplits(Guid id, [FromBody] TransactionSplitRequest request, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId(); if (!userId.HasValue) return Unauthorized();
+        var transaction = await _dbContext.Transactions.FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId.Value, cancellationToken);
+        if (transaction is null) return NotFound();
+        if (transaction.TransactionType != "Expense") return BadRequest("Podział jest dostępny wyłącznie dla wydatków.");
+        if (request.Items.Count < 2 || request.Items.Any(x => x.Amount <= 0) || Math.Abs(request.Items.Sum(x => x.Amount) - Math.Abs(transaction.Amount)) > 0.01m)
+            return BadRequest("Podział musi zawierać co najmniej dwie dodatnie kwoty, których suma równa się kwocie wydatku.");
+        _dbContext.TransactionSplits.RemoveRange(_dbContext.TransactionSplits.Where(x => x.TransactionId == id));
+        _dbContext.TransactionSplits.AddRange(request.Items.Select(x => new TransactionSplit(id, x.CategoryId, x.Amount, x.Memo ?? string.Empty)));
+        _dbContext.Entry(transaction).Property(x => x.IsSplit).CurrentValue = true;
+        await _dbContext.SaveChangesAsync(cancellationToken); return NoContent();
     }
 
     [HttpDelete("{id:guid}")]

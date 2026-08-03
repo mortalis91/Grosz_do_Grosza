@@ -25,6 +25,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<TransactionSplit> TransactionSplits => Set<TransactionSplit>();
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<ImportLog> ImportLogs => Set<ImportLog>();
     public DbSet<Category> Categories => Set<Category>();

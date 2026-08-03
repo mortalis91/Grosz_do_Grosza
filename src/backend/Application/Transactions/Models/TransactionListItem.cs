@@ -13,4 +13,5 @@ public sealed record TransactionListItem(
     string? CounterpartyName,
     Guid? CategoryId,
     string TransactionType,
-    string? ExternalTransactionId);
+    string? ExternalTransactionId,
+    Guid? RefundTransactionId);
