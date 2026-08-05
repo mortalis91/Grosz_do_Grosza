@@ -1,198 +1,170 @@
 # Audyt bezpieczeństwa
 
-Date: 2026-08-05  
-Scope: ASP.NET Core API, Next.js frontend, PostgreSQL/Compose configuration and repository contents.  
-Method: static source/configuration review, dependency/build inspection and targeted local checks. No authenticated penetration test, production infrastructure test, container scan or external DAST was available. Findings should be re-tested after remediation.
+Data: 2026-08-05  
+Zakres: API ASP.NET Core, frontend Next.js, konfiguracja PostgreSQL/Compose oraz zawartość repozytorium.  
+Metoda: statyczny przegląd kodu i konfiguracji, analiza zależności/builda oraz celowane testy lokalne. Nie wykonano uwierzytelnionego testu penetracyjnego, testu infrastruktury produkcyjnej, skanowania kontenerów ani zewnętrznego DAST. Po wdrożeniu poprawek ustalenia należy ponownie zweryfikować.
 
 ## Podsumowanie zarządcze
 
-The application is not ready for an internet-facing production deployment. The most important blockers are:
+Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsze blokery to:
 
-1. Cross-user data access in category rules and transaction endpoints (IDOR / broken object-level authorization).
-2. Hard-coded database and JWT secrets, including a development JWT fallback.
-3. No rate limiting or lockout on login/registration.
-4. File upload limits and content/resource controls are missing.
-5. HTTPS, security headers and production CORS/deployment configuration are not enforced.
-6. Access tokens are stored in browser `localStorage`, making token theft possible after any XSS/client compromise.
+1. Dostęp użytkownika do danych innego użytkownika w regułach kategorii i endpointach transakcji (IDOR / wadliwa autoryzacja obiektowa).
+2. Hasła bazy danych i JWT zapisane bezpośrednio w konfiguracji, w tym awaryjny klucz JWT dla developmentu.
+3. Brak limitowania żądań i blokady konta przy logowaniu/rejestracji.
+4. Brak limitów przesyłania plików oraz kontroli zasobów podczas przetwarzania CSV.
+5. Brak wymuszenia HTTPS, nagłówków bezpieczeństwa i produkcyjnej konfiguracji CORS.
+6. Tokeny dostępowe są przechowywane w `localStorage`, co umożliwia ich kradzież po XSS lub przejęciu klienta.
 
 ## Podsumowanie ryzyka
 
-| Risk | Count | Main examples |
-|---|---:|---|
-| Critical | 0 confirmed | No confirmed unauthenticated RCE or SQL injection in static review |
-| High | 7 | IDOR, secrets, brute force, upload DoS, JWT storage/lifecycle, missing HTTPS |
-| Medium | 8 | headers, CORS, Swagger exposure, password hashing hardening, validation and logging |
-| Low / informational | 5 | no cookies/CSRF surface, no shell execution found, dependency/process improvements |
+| Ryzyko              |           Liczba | Główne przykłady                                                                  |
+| ------------------- | ---------------: | --------------------------------------------------------------------------------- |
+| Krytyczne           | 0 potwierdzonych | Nie potwierdzono nieuwierzytelnionego RCE ani SQL Injection w analizie statycznej |
+| Wysokie             |                7 | IDOR, sekrety, brute force, DoS importu, przechowywanie JWT, brak HTTPS           |
+| Średnie             |                8 | Nagłówki, CORS, Swagger, haszowanie haseł, walidacja i logowanie                  |
+| Niskie/informacyjne |                5 | Brak powierzchni cookies/CSRF, brak wykonywania poleceń, usprawnienia zależności  |
 
 ## Ustalenia
 
-### SEC-01 — Broken object-level authorization in transactions — High
+### SEC-01 — Wadliwa autoryzacja obiektowa transakcji — wysokie
 
-**Threat:** An authenticated user who knows another transaction UUID can read it. This exposes financial data and is an IDOR (OWASP A01:2021).
+**Zagrożenie:** Uwierzytelniony użytkownik znający UUID innej transakcji może ją odczytać. Ujawnia to dane finansowe i stanowi IDOR (OWASP A01:2021).
 
-**Location:** `src/backend/Api/Controllers/TransactionsController.cs:72-92`, `GetById` queries by `x.Id == id` but does not constrain `x.UserId`.
+**Miejsce:** `src/backend/Api/Controllers/TransactionsController.cs:72-92`, metoda `GetById` filtruje tylko po `x.Id == id`, bez ograniczenia `x.UserId`.
 
-**Fix:** Query with `x.Id == id && x.UserId == userId.Value`; return `NotFound()` for non-owned objects. Add tests for read/update/delete/splits using two users.
+**Poprawka:** Dodać `x.Id == id && x.UserId == userId.Value`, a dla obcego obiektu zwracać `NotFound()`. Dodać testy odczytu, edycji, usuwania i splitów dla dwóch użytkowników.
 
-**Related:** `GetSplits` checks ownership of the parent at line 222, but the returned split query at line 224 should also be treated as an ownership boundary and tested.
+### SEC-02 — Wadliwa autoryzacja obiektowa reguł kategorii — wysokie
 
-### SEC-02 — Broken object-level authorization in category rules — High
+**Zagrożenie:** Reguły kategorii można enumerować między użytkownikami oraz tworzyć/aktualizować z dowolnym `request.UserId`. Umożliwia to ujawnienie i modyfikację cudzych danych.
 
-**Threat:** Category rules can be enumerated across users and created/updated using an arbitrary `request.UserId`. This permits cross-user data disclosure and tampering (A01:2021, A05:2021).
+**Miejsce:** `src/backend/Api/Controllers/CategoryRulesController.cs:24-75`.
 
-**Location:** `src/backend/Api/Controllers/CategoryRulesController.cs:24-75`.
+**Poprawka:** Ignorować `userId` z query/body i wyznaczać właściciela wyłącznie przez `User.GetUserId()`. Dodać `x.UserId == currentUserId` w `GetAll`, `GetById` i `Update`; sprawdzać, czy `CategoryId` należy do tego samego użytkownika.
 
-**Fix:** Ignore `userId` from query/body. Derive the owner exclusively from `User.GetUserId()`. Add `x.UserId == currentUserId` to `GetAll`, `GetById`, and `Update`; validate that `CategoryId` belongs to the same user.
+### SEC-03 — Sekrety zapisane w kodzie i niebezpieczny fallback JWT — wysokie
 
-### SEC-03 — Hard-coded production secrets and unsafe JWT fallback — High
+**Zagrożenie:** Osoba mająca dostęp do repozytorium może tworzyć tokeny lub uzyskać dostęp do bazy. Fallback pozwala uruchomić aplikację z powszechnie znanym kluczem.
 
-**Threat:** Repository users can forge tokens or access the database. The fallback key allows a deployment misconfiguration to silently start with a known signing key.
+**Miejsce:** `compose.yml:9` (`POSTGRES_PASSWORD: postgres`), connection string i `Jwt:Key` w `src/backend/Api/appsettings.json`, fallback `dev-only-change-me-dev-only-change-me` w `src/backend/Api/Program.cs:38`.
 
-**Location:** `compose.yml:9` (`POSTGRES_PASSWORD: postgres`), `src/backend/Api/appsettings.json` connection string and `Jwt:Key`, `src/backend/Api/Program.cs:38` fallback `dev-only-change-me-dev-only-change-me`.
+**Poprawka:** Usunąć sekrety ze śledzonych plików, użyć secret managera/zmiennych środowiskowych, przerwać start poza Development przy braku sekretów, wymagać losowego klucza minimalnej długości, wykonać rotację i używać osobnych danych dla każdego środowiska.
 
-**Fix:** Remove secrets from tracked files. Use a secret manager/environment variables, fail startup outside Development when `Jwt:Key` or the database password is missing, require a minimum random key length, rotate any exposed credentials, and use separate credentials per environment.
+### SEC-04 — Brak limitowania żądań i blokad uwierzytelniania — wysokie
 
-### SEC-04 — No rate limiting, lockout or abuse controls for authentication — High
+**Zagrożenie:** Logowanie i rejestrację można atakować brute force, spamować lub wykorzystywać do wyczerpania zasobów.
 
-**Threat:** Login and registration can be brute-forced, spammed, or used for resource exhaustion. The login response is generic, which helps, but there is no throttling.
+**Miejsce:** `src/backend/Api/Controllers/AuthController.cs:18-31`, `src/backend/Infrastructure/Auth/AuthService.cs`.
 
-**Location:** `src/backend/Api/Controllers/AuthController.cs:18-31`, `src/backend/Infrastructure/Auth/AuthService.cs`.
+**Poprawka:** Dodać rate limiting per IP i identyfikator konta, wykładnicze opóźnienie/tymczasową blokadę, limity body, monitoring i alerty. Zachować ogólne komunikaty błędów, aby nie umożliwiać enumeracji e-maili.
 
-**Fix:** Add ASP.NET Core rate limiting per IP and account identifier, exponential backoff/temporary lockout, request body limits, monitoring and alerting. Keep generic authentication errors and avoid email enumeration on registration.
+### SEC-05 — Niebezpieczny cykl życia JWT i przechowywanie w przeglądarce — wysokie
 
-### SEC-05 — JWT lifecycle and browser storage are unsafe for production — High
+**Zagrożenie:** Tokeny są ważne osiem godzin, nie mają odświeżania, unieważniania ani rotacji i są zapisane w `localStorage`. Każdy XSS lub przejęty skrypt może wyprowadzić token bearer.
 
-**Threat:** Tokens are valid for eight hours, have no refresh/revocation/rotation mechanism, and are stored in `localStorage`. Any XSS or compromised third-party script can exfiltrate the bearer token.
+**Miejsce:** `src/backend/Infrastructure/Auth/JwtTokenService.cs:24-41`; `src/frontend/lib/session.ts:1-15`.
 
-**Location:** `src/backend/Infrastructure/Auth/JwtTokenService.cs:24-41`; `src/frontend/lib/session.ts:1-15`.
+**Poprawka:** Stosować krótkie tokeny dostępowe (5–15 minut) oraz rotowane, haszowane tokeny odświeżające przechowywane po stronie serwera. Preferować sesję przez HttpOnly, Secure, SameSite cookie lub BFF.
 
-**Fix:** Prefer short-lived access tokens (5–15 minutes) plus rotating, hashed refresh tokens stored server-side. Revoke refresh tokens on logout/password change. Prefer an HttpOnly, Secure, SameSite cookie-based session or a BFF pattern. If bearer tokens remain in the browser, enforce a strict CSP and minimize third-party scripts.
+### SEC-06 — Brak wymuszenia HTTPS — wysokie
 
-### SEC-06 — Missing HTTPS enforcement and transport security — High
+**Zagrożenie:** Dane logowania, JWT i dane finansowe mogą zostać przechwycone lub zmodyfikowane przez HTTP.
 
-**Threat:** Credentials, JWTs and financial data can be intercepted or modified over HTTP. The current defaults use `http://localhost` and there is no `UseHttpsRedirection`/HSTS.
+**Miejsce:** `src/backend/Api/Program.cs:82-87`, `src/frontend/.env.local:1`, instrukcje HTTP w `README.md`.
 
-**Location:** `src/backend/Api/Program.cs:82-87`, `src/frontend/.env.local:1`, `README.md` local HTTP instructions.
+**Poprawka:** Zakończyć TLS na zaufanym reverse proxy lub Kestrel, przekierowywać HTTP do HTTPS, włączyć HSTS wyłącznie w produkcji i używać adresów HTTPS API.
 
-**Fix:** Terminate TLS at a trusted reverse proxy or Kestrel, redirect HTTP to HTTPS, enable HSTS only in production, configure secure cookie attributes, use HTTPS API origins, and document certificate/secret management.
+### SEC-07 — Nielimitowany upload i import CSV — wysokie
 
-### SEC-07 — Unbounded file upload and CSV processing — High
+**Zagrożenie:** Duże lub uszkodzone pliki mogą wyczerpać pamięć/CPU. Brakuje limitów rozmiaru, wierszy, pól, czasu i przestrzeni.
 
-**Threat:** An attacker can upload very large files or malformed CSV data, causing memory/CPU exhaustion. The upload is accepted based on filename/parser behavior and has no size, row, field, timeout or storage quota.
+**Miejsce:** `src/backend/Api/Controllers/ImportsController.cs:27-40`; `src/backend/Infrastructure/Imports/Parsers/CsvParser.cs:7-14` ładuje cały plik do pamięci.
 
-**Location:** `src/backend/Api/Controllers/ImportsController.cs:27-40`; `src/backend/Infrastructure/Imports/Parsers/CsvParser.cs:7-14` reads all lines into memory and splits the whole file.
+**Poprawka:** Wprowadzić limity multipart, pliku, wierszy, kolumn i długości pól, walidację rozszerzenia i typu, timeouty, limity per użytkownik oraz parser strumieniowy. Nie ufać `fileName` przy ścieżkach plików.
 
-**Fix:** Enforce endpoint and multipart size limits, file size and row/column/field-length limits, allowed extension and detected content type, cancellation/timeouts, per-user quotas, and streaming/bounded parsing. Store uploads outside the web root if persisted, generate server-side names, and never trust `fileName` for filesystem paths.
+### SEC-08 — Brak nagłówków bezpieczeństwa i polityki błędów — średnie
 
-### SEC-08 — Missing security headers and production error policy — Medium
+Brakuje CSP, ochrony przed framingiem, `nosniff`, polityki referrera i Permissions Policy. Dodać `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`/`X-Frame-Options` oraz ogólny handler błędów produkcyjnych.
 
-**Threat:** Missing CSP, frame protections, MIME sniffing protection, referrer policy and Permissions Policy increase XSS/clickjacking/data-leak impact. Developer exception pages must never be exposed publicly.
+### SEC-09 — Swagger dostępny w każdym środowisku — średnie
 
-**Location:** `src/backend/Api/Program.cs:55-65`; no security-header middleware is configured.
+**Zagrożenie:** Publiczny schemat API ułatwia mapowanie aplikacji.
 
-**Fix:** Add production headers: `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and `frame-ancestors`/`X-Frame-Options`. Use HSTS only over HTTPS. Keep `UseDeveloperExceptionPage` Development-only and use a generic production error handler.
+**Miejsce:** `src/backend/Api/Program.cs:68-75`.
 
-### SEC-09 — Swagger is exposed in every environment — Medium
+**Poprawka:** Włączać Swagger tylko w Development albo chronić go sieciowo/autoryzacją.
 
-**Threat:** Public API schema and endpoint details help attackers map the application and may expose internal models.
+### SEC-10 — CORS nieprzygotowany do produkcji — średnie
 
-**Location:** `src/backend/Api/Program.cs:68-75`.
+**Zagrożenie:** Dozwolone są sztywne adresy localhost, a `AllowAnyHeader` i `AllowAnyMethod` są zbyt szerokie.
 
-**Fix:** Enable Swagger only in Development or protect it with network access/authentication. If production documentation is required, publish a sanitized, access-controlled artifact.
+**Poprawka:** Czytać allowlistę z konfiguracji, domyślnie odmawiać, ograniczyć metody/nagłówki i nie łączyć wildcard origin z credentials.
 
-### SEC-10 — CORS is development-only and not deployment-safe — Medium
+### SEC-11 — Haszowanie haseł wymaga wersjonowania — średnie
 
-**Threat:** Hard-coded localhost origins do not support a controlled production frontend configuration. Future changes may lead to an overly broad policy; `AllowAnyHeader` and `AllowAnyMethod` are unnecessarily permissive.
+PBKDF2-SHA256 z 100 000 iteracji jest lepszy niż plaintext, ale ma stały koszt i brak ścieżki podnoszenia parametrów. Użyć `PasswordHasher<TUser>` ASP.NET Core lub Argon2id/scrypt, wersjonowanego formatu i rehash-on-login.
 
-**Location:** `src/backend/Api/Program.cs:29-35`.
+### SEC-12 — Niepełna walidacja rejestracji i żądań — średnie
 
-**Fix:** Read an explicit allowlist from environment configuration, fail closed when it is missing, allow only required methods/headers, and do not combine wildcard origins with credentials.
+Brakuje serwerowych limitów długości nazw, e-maili, kategorii, opisów i wartości liczbowych. Dodać FluentValidation/DataAnnotations, walidację e-maila, dozwolone enumy/waluty i globalne limity rozmiaru żądań.
 
-### SEC-11 — Password hashing should be upgraded and versioned — Medium
+### SEC-13 — Wrażliwe opisy trafiają do logów importu — średnie
 
-**Threat:** PBKDF2-SHA256 with 100,000 iterations is custom-formatted and has no work-factor/version upgrade path. It is better than plaintext but weaker operationally than a maintained password KDF.
+`TransactionImportService.cs:75,118` zapisuje `draft.Title` w `ImportLog`. Maskować dane, ograniczyć retencję i dostęp oraz nie logować tokenów, haseł ani pełnych request body.
 
-**Location:** `src/backend/Infrastructure/Auth/PasswordHasher.cs:9-27`.
+### SEC-14 — Token po stronie klienta i ryzyko XSS — średnie
 
-**Fix:** Use ASP.NET Core `PasswordHasher<TUser>` or Argon2id/scrypt with a versioned encoded format, current calibrated cost, and rehash-on-login. Add password length/strength and breached-password controls appropriate for the threat model.
+React domyślnie ucieka tekst, a `dangerouslySetInnerHTML` nie znaleziono, ale `localStorage` zwiększa skutki przyszłego XSS. Użyć HttpOnly cookie/BFF, CSP i testów bezpiecznego renderowania.
 
-### SEC-12 — Registration and request validation are incomplete — Medium
+### SEC-15 — Zewnętrzne żądanie NBP — niskie/średnie
 
-**Threat:** Oversized display names, emails, category values, descriptions and numeric values can cause abuse, data-quality issues, or excessive resource use. Password minimum validation is primarily client-side.
-
-**Location:** `AuthController`/`AuthService`, request records under `src/backend/Application/**/Models`, and controller validation methods.
-
-**Fix:** Add server-side FluentValidation/DataAnnotations, maximum lengths, normalized email validation, allowed enum/currency values, sensible decimal/date bounds, and global request-size limits. Never rely on frontend `minLength`/`required` alone.
-
-### SEC-13 — Sensitive financial descriptions are written to import logs — Medium
-
-**Threat:** Import titles/counterparty data may contain account or payment information. Logs often have broader access and longer retention than application data.
-
-**Location:** `src/backend/Infrastructure/Imports/TransactionImportService.cs:75,118` where `draft.Title` is stored in `ImportLog`.
-
-**Fix:** Minimize/redact sensitive fields, define retention and access controls, avoid request/token/password logging, and ensure production logs are encrypted and monitored.
-
-### SEC-14 — Client-side token storage and XSS posture — Medium
-
-**Threat:** React escapes rendered text by default, and no obvious `dangerouslySetInnerHTML` was found in the reviewed frontend, but `localStorage` makes any future XSS or dependency compromise immediately token-impacting.
-
-**Location:** `src/frontend/lib/session.ts:5,10`.
-
-**Fix:** Use HttpOnly cookies/BFF where possible; add CSP, dependency auditing, and tests preventing unsafe HTML injection. Do not render imported descriptions as raw HTML.
-
-### SEC-15 — External NBP request is an SSRF/dependency concern — Low/Medium
-
-**Threat:** The frontend fetches a fixed external URL, so this is not currently user-controlled SSRF. It still introduces availability, privacy and supply-chain dependence on a third party.
-
-**Location:** `src/frontend/app/reports/page.tsx` fetches `https://api.nbp.pl/api/exchangerates/tables/A?format=json`.
-
-**Fix:** Keep the destination constant, add timeout/error handling and caching, or proxy through a controlled backend service with an allowlist. Do not accept arbitrary URLs from users.
+Frontend odwołuje się do stałego URL NBP, więc nie jest to obecnie SSRF sterowany przez użytkownika. Dodać timeout, obsługę błędów i cache albo kontrolowany proxy z allowlistą.
 
 ## Sprawdzone klasy podatności
 
-| Area | Assessment |
-|---|---|
-| SQL Injection | No direct SQL concatenation found; EF Core LINQ is parameterized. Still add tests and avoid `FromSqlRaw` without parameters. |
-| XSS | No obvious raw HTML sink found; React escaping helps. `localStorage` turns any future XSS into token theft. Add CSP and security tests. |
-| CSRF | API uses Authorization bearer headers and no cookies, so classic CSRF exposure is currently low. If cookies are introduced, add SameSite and antiforgery protection. |
-| SSRF | No user-controlled backend URL fetch found. Fixed NBP frontend request is a controlled external dependency. |
-| Path Traversal | No direct filesystem path from user input found. Keep upload storage server-generated and outside web root. |
-| Command Injection | No shell/process execution found in application code. |
-| Deserialization | `JsonSerializer.Deserialize<Dictionary<string,string>>` parses user input; constrain size/count/depth and handle malformed input as a 400, not an unhandled 500. No unsafe polymorphic deserialization found. |
-| File Upload | High risk due missing limits, validation and bounded parsing; see SEC-07. |
-| Authentication | Login/register exist, but rate limiting, lockout and stronger validation are missing. |
-| Authorization | Several controllers scope data by user, but category rules and transaction reads contain IDOR findings. |
-| JWT | Signature validation is configured, but secret fallback, 8-hour lifetime, no rotation/revocation and localStorage are production risks. |
-| Refresh Token | No refresh-token endpoint or server-side refresh-token store was found. |
-| CORS | Explicit localhost origins are safer than wildcard, but production origins are not configurable and methods/headers are broad. |
-| Cookies | No application auth cookies found. If migrated from localStorage, use HttpOnly/Secure/SameSite. |
-| Security Headers | Not configured; see SEC-08. |
-| HTTPS | Not enforced; see SEC-06. |
-| Rate Limiting / Brute Force | Not configured; see SEC-04. |
-| Password Hashing | PBKDF2 with fixed 100k iterations and no versioning; see SEC-11. |
-| Secret Leakage | Database password, JWT key and local API URL are in tracked/config files; see SEC-03. CSV/XLSX attachments also contain financial data and should not be public artifacts. |
-| Environment Variables | `.env.local` is development-only and the backend secrets are not externalized. Define production configuration contract and secret scanning in CI. |
-| Logging | Import titles are persisted; minimize and protect them. No evidence of JWT/password logging in reviewed code. |
-| IDOR | Confirmed in transactions `GetById` and category rules; see SEC-01/SEC-02. |
+| Obszar                    | Ocena                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| SQL Injection             | Nie znaleziono konkatenacji SQL; LINQ EF Core jest parametryzowany.                                     |
+| XSS                       | Nie znaleziono oczywistego niebezpiecznego renderowania HTML; wymagane CSP i testy.                     |
+| CSRF                      | API używa nagłówka bearer i nie używa cookies auth, więc klasyczne CSRF jest obecnie ograniczone.       |
+| SSRF                      | Nie znaleziono sterowanego przez użytkownika URL backendu. Stały URL NBP jest kontrolowaną zależnością. |
+| Path Traversal            | Nie znaleziono ścieżki pliku budowanej z danych użytkownika.                                            |
+| Command Injection         | Nie znaleziono wykonywania procesów/powłoki.                                                            |
+| Deserialization           | JSON mapowania użytkownika wymaga limitów rozmiaru, głębokości i liczby elementów.                      |
+| File Upload               | Wysokie ryzyko z powodu braku limitów i parsera ograniczonego pamięcią.                                 |
+| Authentication            | Logowanie/rejestracja istnieją, ale brakuje rate limitingu i blokad.                                    |
+| Authorization             | Potwierdzono IDOR w transakcjach i regułach kategorii.                                                  |
+| JWT                       | Walidacja podpisu działa, ale fallback sekretu, długi czas życia i brak rotacji są ryzykiem.            |
+| Refresh Token             | Nie znaleziono endpointu ani magazynu tokenów odświeżających.                                           |
+| CORS                      | Lokalne originy są lepsze niż wildcard, ale konfiguracja produkcyjna jest nieobecna.                    |
+| Cookies                   | Nie znaleziono cookies auth; przy migracji użyć HttpOnly/Secure/SameSite.                               |
+| Nagłówki bezpieczeństwa   | Nie są skonfigurowane; zob. SEC-08.                                                                     |
+| HTTPS                     | Nie jest wymuszane; zob. SEC-06.                                                                        |
+| Rate limiting/brute force | Nie jest skonfigurowane; zob. SEC-04.                                                                   |
+| Haszowanie haseł          | PBKDF2 ze stałym kosztem i bez wersjonowania; zob. SEC-11.                                              |
+| Wycieki sekretów          | Hasło bazy, klucz JWT i lokalny URL API są w konfiguracji; zob. SEC-03.                                 |
+| Zmienne środowiskowe      | `.env.local` jest tylko deweloperskie, a sekrety backendu nie są zewnętrzne.                            |
+| Logowanie                 | Zapisywane są tytuły importów; należy je ograniczyć i chronić.                                          |
+| IDOR                      | Potwierdzono w `TransactionsController.GetById` i regułach kategorii.                                   |
 
 ## Mapowanie na OWASP Top 10: 2021
 
-| OWASP category | Status |
-|---|---|
-| A01 Broken Access Control | High — SEC-01 and SEC-02. |
-| A02 Cryptographic Failures | High — hard-coded secrets, HTTP, localStorage token; SEC-03/05/06. |
-| A03 Injection | No SQL/command injection found; validate JSON/file inputs. |
-| A04 Insecure Design | High — no abuse controls, upload quotas or token revocation. |
-| A05 Security Misconfiguration | High — Swagger, headers, HTTPS and development defaults. |
-| A06 Vulnerable and Outdated Components | Requires dependency scanner/SBOM; package versions are pinned but were not fully CVE-verified in this audit. |
-| A07 Identification and Authentication Failures | High — brute force, long JWT lifetime, no refresh/revocation. |
-| A08 Software and Data Integrity Failures | Medium — add lockfile/SBOM scanning, signed CI artifacts and dependency update policy. |
-| A09 Security Logging and Monitoring Failures | Medium — no visible audit/alerting strategy; import data is logged. |
-| A10 Server-Side Request Forgery | Low currently — fixed NBP URL, no user-controlled destination found. |
+| Kategoria OWASP                                | Status                                                                    |
+| ---------------------------------------------- | ------------------------------------------------------------------------- |
+| A01 Broken Access Control                      | Wysokie — SEC-01 i SEC-02.                                                |
+| A02 Cryptographic Failures                     | Wysokie — sekrety, HTTP i token localStorage.                             |
+| A03 Injection                                  | Nie znaleziono SQL/command injection; walidować JSON i pliki.             |
+| A04 Insecure Design                            | Wysokie — brak kontroli nadużyć, limitów uploadu i unieważniania tokenów. |
+| A05 Security Misconfiguration                  | Wysokie — Swagger, nagłówki, HTTPS i domyślne ustawienia.                 |
+| A06 Vulnerable and Outdated Components         | Wymaga skanera zależności/SBOM.                                           |
+| A07 Identification and Authentication Failures | Wysokie — brute force, długi JWT, brak refresh/revocation.                |
+| A08 Software and Data Integrity Failures       | Średnie — dodać skanowanie lockfile/SBOM i podpisy artefaktów CI.         |
+| A09 Security Logging and Monitoring Failures   | Średnie — brak widocznej strategii audytu i alertów.                      |
+| A10 Server-Side Request Forgery                | Obecnie niskie — stały URL NBP.                                           |
 
 ## Bramka produkcyjna
 
-Do not expose this build publicly until at least SEC-01 through SEC-07 are fixed and verified with automated two-user authorization tests. Before launch also require TLS termination, secret rotation, production CORS, rate limiting, upload limits, security headers, controlled Swagger exposure, dependency/CVE scanning, database backups, monitoring and an external authenticated penetration test.
+Nie publikować aplikacji, dopóki co najmniej SEC-01–SEC-07 nie zostaną poprawione i zweryfikowane automatycznymi testami dwóch użytkowników. Przed startem wymagane są również TLS, rotacja sekretów, produkcyjny CORS, rate limiting, limity uploadu, nagłówki bezpieczeństwa, kontrolowany Swagger, skanowanie CVE, backupy bazy, monitoring oraz zewnętrzny uwierzytelniony test penetracyjny.
 
 ## Zalecane polecenia weryfikacyjne
 
@@ -205,11 +177,11 @@ npm run lint
 npm run build
 ```
 
-Add dynamic tests for: cross-user transaction reads, cross-user category-rule CRUD, malformed/oversized uploads, login throttling, expired/tampered JWTs, CORS origins, missing production secrets, security headers and HTTPS redirects.
+Dodać testy dynamiczne: odczyt transakcji innego użytkownika, CRUD reguł kategorii, uszkodzone/za duże uploady, throttling logowania, wygasłe i zmodyfikowane JWT, originy CORS, brak sekretów produkcyjnych, nagłówki bezpieczeństwa i przekierowania HTTPS.
 
 ## Wyniki wykonania audytu
 
-- `dotnet test Backend.sln --configuration Release --no-restore`: **failed** — 2 existing parser tests expect `Lista_operacji_20260712_205807.csv` at the repository root, but the sample is under `attachments/old/`. This is a test-fixture/path failure, not a security pass.
-- `npm run lint`: completed with 4 warnings and 0 errors. Warnings concern a missing React effect dependency, `<img>` optimization, and anonymous config exports.
-- `npm run build`: completed successfully during the audit.
-- `dotnet build Backend.sln --configuration Release --no-restore`: was not independently accepted from the parallel run because concurrent build/test processes locked generated assemblies; rerun serially after stopping running API/test processes.
+- `dotnet test Backend.sln --configuration Release --no-restore`: **niepowodzenie** — 2 istniejące testy parsera oczekują `Lista_operacji_20260712_205807.csv` w katalogu głównym, a plik znajduje się w `attachments/old/`. To problem fixture/ścieżki testowej, nie pozytywny wynik bezpieczeństwa.
+- `npm run lint`: zakończone 4 ostrzeżeniami i 0 błędów. Dotyczą brakującej zależności efektu React, optymalizacji `<img>` i anonimowych eksportów konfiguracji.
+- `npm run build`: zakończone pomyślnie podczas audytu.
+- `dotnet build Backend.sln --configuration Release --no-restore`: nie zostało niezależnie zaakceptowane z równoległego uruchomienia, ponieważ procesy build/test blokowały assembly; należy uruchomić ponownie sekwencyjnie po zatrzymaniu procesów API/testów.

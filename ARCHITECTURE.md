@@ -2,107 +2,99 @@
 
 ## Cel
 
-This repository will host a commercial-grade Personal Finance Manager inspired by Kontomierz, YNAB, Wallet, and Portfolio Performance, but broader in scope:
+Repozytorium będzie zawierać komercyjnej klasy menedżer finansów osobistych inspirowany aplikacjami Kontomierz, YNAB, Wallet i Portfolio Performance, ale szerszy zakresem:
 
-- bank transaction import and normalization
-- multi-account financial tracking
-- budgeting and cashflow analysis
-- category automation and rules
-- investments and net worth tracking
-- subscriptions and recurring expenses
-- Allegro integration
-- AI-assisted classification and natural language search
+- import i normalizacja transakcji bankowych,
+- obsługa wielu rachunków,
+- budżetowanie i analiza przepływów pieniężnych,
+- automatyzacja kategorii i reguł,
+- śledzenie inwestycji i wartości netto,
+- subskrypcje i wydatki cykliczne,
+- integracja z Allegro,
+- klasyfikacja wspomagana przez AI i wyszukiwanie językiem naturalnym.
 
-The solution is designed as a modular monolith first, with clear seams that allow future service extraction if required.
+Rozwiązanie jest najpierw projektowane jako monolit modułowy, z wyraźnymi granicami umożliwiającymi późniejsze wydzielenie usług, jeśli będzie to potrzebne.
 
 ## Zasady architektury
 
-- Clean Architecture
-- SOLID
-- DDD boundaries
-- CQRS for application use cases
-- explicit domain models, no anemic persistence-first design
-- zero business logic in controllers
-- infrastructure isolated behind interfaces
-- testability as a first-class requirement
+- Clean Architecture,
+- SOLID,
+- granice DDD,
+- CQRS dla przypadków użycia aplikacji,
+- jawne modele domenowe, bez anemicznego modelu projektowanego wyłącznie pod persystencję,
+- brak logiki biznesowej w kontrolerach,
+- izolacja infrastruktury za interfejsami,
+- testowalność jako wymaganie pierwszej klasy.
 
 ## Przegląd systemu
 
 ### Frontend
 
-- Next.js 15
-- React
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- TanStack Query
-- TanStack Table
-- Recharts
-- React Hook Form
-- Zod
+- Next.js 15,
+- React,
+- TypeScript,
+- Tailwind CSS,
+- shadcn/ui,
+- TanStack Query,
+- TanStack Table,
+- Recharts,
+- React Hook Form,
+- Zod.
 
 ### Backend
 
-- ASP.NET Core 10
-- Entity Framework Core
-- PostgreSQL
-- FluentValidation
-- MediatR
-- AutoMapper
-- Hangfire
-- Redis
-- Swagger / OpenAPI
-- JWT authentication
+- ASP.NET Core 10,
+- Entity Framework Core,
+- PostgreSQL,
+- FluentValidation,
+- MediatR,
+- AutoMapper,
+- Hangfire,
+- Redis,
+- Swagger / OpenAPI,
+- uwierzytelnianie JWT.
 
 ## Zakres zrealizowanego MVP
 
-The current implementation is a modular monolith with PostgreSQL and a Next.js
-frontend. The implemented vertical slices are authentication, accounts and
-balances, categories, transactions, CSV imports and dashboard summaries.
-Transactions use soft deletion through the `Archived` status and exclude
-`Ignored` transactions from income and expense summaries. The remaining module
-list below describes the target architecture and is not a claim that every
-module is implemented.
+Obecna implementacja jest monolitem modułowym z PostgreSQL i frontendem Next.js. Zrealizowane pionowe fragmenty obejmują uwierzytelnianie, konta i salda, kategorie, transakcje, importy CSV oraz podsumowania dashboardu. Transakcje używają miękkiego usuwania przez status `Archived` i wykluczają transakcje `Ignored` z podsumowań przychodów i wydatków. Pozostałe moduły opisane poniżej przedstawiają docelową architekturę i nie oznaczają, że każdy z nich jest już zaimplementowany.
 
 ### Infrastruktura pomocnicza
 
-- PostgreSQL as the source of truth
-- Redis for caching, background job coordination, and short-lived states
-- Hangfire for imports, reconciliation, AI jobs, sync jobs, and scheduled recalculations
-- Docker and Docker Compose for local development and deployment parity
-- GitHub Actions for CI
+- PostgreSQL jako źródło prawdy,
+- Redis do cache, koordynacji zadań w tle i stanów krótkotrwałych,
+- Hangfire do importów, uzgadniania danych, zadań AI, synchronizacji i zaplanowanych przeliczeń,
+- Docker i Docker Compose do developmentu lokalnego oraz zgodności wdrożeń,
+- GitHub Actions do CI.
 
 ## Granice wysokiego poziomu
 
-The backend is structured as a modular monolith with bounded contexts:
+Backend jest zorganizowany jako monolit modułowy z ograniczonymi kontekstami:
 
-1. Identity and Access
-2. Accounts
-3. Transactions
-4. Categories and Rules
-5. Imports
-6. Budgets
-7. Goals
-8. Assets and Investments
-9. Subscriptions
-10. Reports and Analytics
-11. Allegro Integration
-12. AI Assistants and Search
-13. Audit and Activity Log
-14. Notifications
+1. Tożsamość i dostęp,
+2. Konta,
+3. Transakcje,
+4. Kategorie i reguły,
+5. Importy,
+6. Budżety,
+7. Cele,
+8. Majątek i inwestycje,
+9. Subskrypcje,
+10. Raporty i analityka,
+11. Integracja z Allegro,
+12. Asystenci AI i wyszukiwanie,
+13. Audyt i dziennik aktywności,
+14. Powiadomienia.
 
-Each module owns:
+Każdy moduł posiada:
 
-- domain entities and value objects
-- application use cases
-- validators
-- repositories and persistence adapters
-- API contracts
-- tests
+- encje domenowe i obiekty wartości,
+- przypadki użycia aplikacji,
+- walidatory,
+- repozytoria i adaptery persystencji,
+- kontrakty API,
+- testy.
 
 ## Struktura repozytorium
-
-The codebase will follow this structure:
 
 ```text
 src/
@@ -128,232 +120,212 @@ docs/
 
 #### Domena
 
-Contains:
+Zawiera:
 
-- entities
-- value objects
-- aggregates
-- domain events
-- domain services
-- repository interfaces
+- encje,
+- obiekty wartości,
+- agregaty,
+- zdarzenia domenowe,
+- serwisy domenowe,
+- interfejsy repozytoriów.
 
-Rules:
+Zasady:
 
-- no EF Core attributes
-- no DTOs
-- no HTTP concepts
-- no infrastructure references
+- brak atrybutów EF Core,
+- brak DTO,
+- brak pojęć HTTP,
+- brak odwołań do infrastruktury.
 
 #### Aplikacja
 
-Contains:
+Zawiera:
 
-- commands and queries
-- handlers
-- validators
-- DTOs and read models
-- application services
-- mapping profiles
+- komendy i zapytania,
+- handlery,
+- walidatory,
+- DTO i modele odczytu,
+- serwisy aplikacyjne,
+- profile mapowania.
 
-Rules:
+Zasady:
 
-- orchestrates domain logic
-- depends on Domain only
-- no direct database access
-- no HTTP-specific code
+- koordynuje logikę domenową,
+- zależy wyłącznie od warstwy Domain,
+- nie ma bezpośredniego dostępu do bazy,
+- nie zawiera kodu zależnego od HTTP.
 
 #### Infrastruktura
 
-Contains:
+Zawiera:
 
-- EF Core DbContext
-- migrations
-- repository implementations
-- external integrations
-- Hangfire jobs
-- Redis cache adapters
-- file storage
-- email and notification providers
-- parsing utilities
+- `DbContext` EF Core,
+- migracje,
+- implementacje repozytoriów,
+- integracje zewnętrzne,
+- zadania Hangfire,
+- adaptery cache Redis,
+- magazyn plików,
+- dostawców poczty i powiadomień,
+- narzędzia do parsowania.
 
 #### API
 
-Contains:
+Zawiera:
 
-- REST endpoints
-- authentication and authorization
-- request/response contracts
-- middleware
-- Swagger setup
-- exception mapping
+- endpointy REST,
+- uwierzytelnianie i autoryzację,
+- kontrakty żądań i odpowiedzi,
+- middleware,
+- konfigurację Swagger,
+- mapowanie wyjątków.
 
 ## Architektura frontendu
 
-The frontend will be organized by feature rather than by technical layer only.
+Frontend będzie organizowany według funkcji, a nie wyłącznie według warstw technicznych.
 
-Suggested areas:
+Proponowane obszary:
 
-- auth
-- dashboard
-- accounts
-- transactions
-- categories
-- rules
-- imports
-- budgets
-- goals
-- assets
-- investments
-- reports
-- allegro
-- ai
-- settings
+- auth,
+- dashboard,
+- accounts,
+- transactions,
+- categories,
+- rules,
+- imports,
+- budgets,
+- goals,
+- assets,
+- investments,
+- reports,
+- allegro,
+- ai,
+- settings.
 
-Frontend rules:
+Zasady frontendu:
 
-- server components by default where practical
-- client components only for interaction-heavy screens
-- TanStack Query for server state
-- React Hook Form + Zod for forms
-- TanStack Table for transaction grids
-- reusable design system components in `shadcn/ui`
+- domyślnie używać server components, jeśli jest to praktyczne,
+- client components stosować tylko dla ekranów wymagających intensywnej interakcji,
+- używać TanStack Query do stanu serwera,
+- używać React Hook Form + Zod do formularzy,
+- używać TanStack Table do tabel transakcji,
+- współdzielone komponenty systemu projektowego utrzymywać w `shadcn/ui`.
 
 ## Strategia modelu domenowego
 
-The domain will be centered around these core aggregates:
+Główne agregaty domenowe:
 
-- `User`
-- `Account`
-- `Transaction`
-- `Category`
-- `CategoryRule`
-- `Budget`
-- `Goal`
-- `Asset`
-- `InvestmentAccount`
-- `ImportBatch`
-- `Subscription`
-- `AuditLog`
+- `User`, `Account`, `Transaction`, `Category`, `CategoryRule`, `Budget`, `Goal`, `Asset`, `InvestmentAccount`, `ImportBatch`, `Subscription`, `AuditLog`.
 
-Supporting concepts:
+Pojęcia pomocnicze:
 
-- `Money`
-- `Currency`
-- `AccountBalanceSnapshot`
-- `TransactionSplit`
-- `Merchant`
-- `Counterparty`
-- `Attachment`
-- `Tag`
-- `ImportSource`
-- `RuleCondition`
+- `Money`, `Currency`, `AccountBalanceSnapshot`, `TransactionSplit`, `Merchant`, `Counterparty`, `Attachment`, `Tag`, `ImportSource`, `RuleCondition`.
 
 ## Przepływ danych
 
 ### Import transakcji
 
-1. CSV, MT940, OFX, or bank-specific parser ingests raw data.
-2. Raw rows are normalized into a canonical import model.
-3. Duplicate detection runs before persistence.
-4. Transactions are created or updated.
-5. Rules and categorization are applied.
-6. Account balances and derived summaries are recalculated.
-7. Import history and logs are stored.
+1. Parser CSV, MT940, OFX lub bankowy pobiera dane surowe.
+2. Wiersze surowe są normalizowane do kanonicznego modelu importu.
+3. Przed zapisem uruchamiane jest wykrywanie duplikatów.
+4. Transakcje są tworzone lub aktualizowane.
+5. Stosowane są reguły i kategoryzacja.
+6. Przeliczane są salda kont i podsumowania pochodne.
+7. Zapisywana jest historia importu i logi.
 
 ### Dashboard i raporty
 
-1. Frontend requests a summary endpoint.
-2. Application layer composes read models.
-3. Infrastructure reads from the database and cached projections.
-4. API returns aggregated data optimized for charts and tables.
+1. Frontend wysyła żądanie do endpointu podsumowania.
+2. Warstwa aplikacji składa modele odczytu.
+3. Infrastruktura odczytuje dane z bazy i cache’owanych projekcji.
+4. API zwraca zagregowane dane zoptymalizowane dla wykresów i tabel.
 
 ### AI i wyszukiwanie
 
-1. User asks a natural-language question.
-2. The query is classified into intent.
-3. Relevant transactions, categories, accounts, or reports are retrieved.
-4. The result is converted into a human-readable answer plus structured data.
+1. Użytkownik zadaje pytanie językiem naturalnym.
+2. Zapytanie jest klasyfikowane według intencji.
+3. Pobierane są odpowiednie transakcje, kategorie, konta lub raporty.
+4. Wynik jest zamieniany na zrozumiałą odpowiedź oraz dane strukturalne.
 
 ## Projekt API
 
-The API will be REST-first and versioned.
+API będzie przede wszystkim REST-owe i wersjonowane.
 
-Guidelines:
+Wytyczne:
 
-- `/api/v1/...` route namespace
-- pagination on list endpoints
-- filtering and sorting on read endpoints
-- command endpoints return explicit result contracts
-- validation errors use a consistent problem-details response
-- authentication via JWT bearer tokens
+- przestrzeń tras `/api/v1/...`,
+- paginacja endpointów list,
+- filtrowanie i sortowanie endpointów odczytu,
+- endpointy komend zwracają jawne kontrakty wyników,
+- błędy walidacji używają spójnej odpowiedzi Problem Details,
+- uwierzytelnianie przez tokeny bearer JWT.
 
 ## Strategia trwałości danych
 
-PostgreSQL schema will be designed around:
+Schemat PostgreSQL będzie oparty na:
 
-- normalized transactional data
-- append-friendly import logs
-- denormalized summary tables only when needed for performance
-- auditability for financial changes
+- znormalizowanych danych transakcyjnych,
+- logach importu przyjaznych dopisywaniu,
+- zdenormalizowanych tabelach podsumowań tylko wtedy, gdy są potrzebne dla wydajności,
+- możliwości audytowania zmian finansowych.
 
-EF Core migrations will be the default schema evolution mechanism.
+Migracje EF Core będą domyślnym mechanizmem ewolucji schematu.
 
 ## Przetwarzanie w tle
 
-Hangfire will be used for:
+Hangfire będzie używany do:
 
-- bank import jobs
-- duplicate reconciliation
-- category rule application
-- budget recalculation
-- investment valuation refresh
-- Allegro sync jobs
-- AI enrichment tasks
-- report precomputation
+- zadań importu bankowego,
+- uzgadniania duplikatów,
+- stosowania reguł kategorii,
+- przeliczania budżetów,
+- odświeżania wycen inwestycji,
+- zadań synchronizacji Allegro,
+- wzbogacania danych przez AI,
+- wstępnego obliczania raportów.
 
 ## Wymagania bezpieczeństwa
 
-- JWT authentication
-- role-based authorization
-- secure password reset flow
-- audit logging for sensitive operations
-- input validation everywhere
-- protection against duplicate imports and replayed commands
+- uwierzytelnianie JWT,
+- autoryzacja oparta na rolach,
+- bezpieczny proces resetowania hasła,
+- logowanie audytowe wrażliwych operacji,
+- walidacja danych wejściowych w każdym miejscu,
+- ochrona przed zduplikowanymi importami i ponownie odtworzonymi komendami.
 
 ## Strategia testów
 
 ### Backend
 
-- unit tests for domain logic
-- application handler tests
-- integration tests for API and persistence
-- parser tests for CSV and bank formats
+- testy jednostkowe logiki domenowej,
+- testy handlerów aplikacyjnych,
+- testy integracyjne API i persystencji,
+- testy parserów CSV i formatów bankowych.
 
 ### Frontend
 
-- component tests for critical UI
-- page and flow tests for main journeys
-- form validation tests
+- testy komponentów krytycznych elementów UI,
+- testy stron i przepływów głównych ścieżek użytkownika,
+- testy walidacji formularzy.
 
 ## Etapy dostarczania
 
-This project will be implemented incrementally:
+Projekt będzie realizowany przyrostowo:
 
-1. requirements analysis
-2. architecture and boundaries
-3. database model
-4. backend foundation
-5. frontend foundation
-6. CSV import
-7. automatic categorization
-8. dashboard
-9. reports
-10. Allegro integration
-11. AI features
-12. tests and hardening
-13. Docker and deployment
-14. documentation
+1. analiza wymagań,
+2. architektura i granice modułów,
+3. model bazy danych,
+4. fundament backendu,
+5. fundament frontendu,
+6. import CSV,
+7. automatyczna kategoryzacja,
+8. dashboard,
+9. raporty,
+10. integracja z Allegro,
+11. funkcje AI,
+12. testy i hardening,
+13. Docker i wdrożenie,
+14. dokumentacja.
 
 ## Bieżąca decyzja
 
-The first implementation target should be the backend foundation plus the Pekao CSV import path, because that creates the first vertical slice of real value and validates the core financial data model early.
+Pierwszym celem implementacji powinien być fundament backendu wraz ze ścieżką importu CSV Pekao, ponieważ tworzy to pierwszy pionowy fragment realnej wartości i wcześnie waliduje główny model danych finansowych.
