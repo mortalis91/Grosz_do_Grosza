@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  House,
   LayoutDashboard,
   Tags,
   WalletCards,
@@ -18,6 +19,7 @@ const items = [
   { label: "Kategorie", href: "/categories", icon: Tags },
   { label: "Budżety", href: "/budgets", icon: PiggyBank },
   { label: "Raporty", href: "/reports", icon: BarChart3 },
+  { label: "Planowanie", href: "/planning", icon: House },
 ];
 
 export function Sidebar() {

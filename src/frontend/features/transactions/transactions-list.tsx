@@ -1,7 +1,7 @@
 ﻿// @ts-nocheck
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   ArrowDownUp,
   Check,
@@ -37,6 +37,7 @@ import {
   updateTransaction,
   updateTransactionCategory,
   saveTransactionSplits,
+  getTransactionSplits,
 } from '@/lib/transactions-api';
 
 const emptyForm = {
@@ -58,6 +59,15 @@ const emptyForm = {
   externalTransactionId: '',
   refundTransactionId: '',
 };
+
+function formatSummaryAmount(amount: number, currency: string) {
+  const normalizedCurrency = (currency || 'PLN').trim().toUpperCase();
+  try {
+    return amount.toLocaleString('pl-PL', { style: 'currency', currency: normalizedCurrency });
+  } catch {
+    return `${amount.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${normalizedCurrency}`;
+  }
+}
 
 export function TransactionsList() {
   // Dane ekranu: transakcje, konta i kategorie są pobierane z API po zalogowaniu.
@@ -130,6 +140,10 @@ export function TransactionsList() {
   const [splitItems, setSplitItems] = useState<Array<{ categoryId: string; amount: string; memo: string }>>([
     { categoryId: '', amount: '', memo: '' }, { categoryId: '', amount: '', memo: '' },
   ]);
+  const [expandedSplitIds, setExpandedSplitIds] = useState<string[]>([]);
+  const [splitRows, setSplitRows] = useState<Record<string, Array<{ categoryId: string; amount: number; memo: string }>>>({});
+  const [refundPickerOpen, setRefundPickerOpen] = useState(false);
+  const [refundSearch, setRefundSearch] = useState('');
   // Referencje służą do zamykania dropdownów po kliknięciu poza ich obszarem.
   const typeFilterRef = useRef<HTMLDivElement>(null);
   const amountRef = useRef<HTMLDivElement>(null);
@@ -196,6 +210,7 @@ export function TransactionsList() {
 
     setForm(emptyForm);
     setEditingId(null);
+    setShowCreateForm(false);
     await refresh();
   }
 
@@ -231,8 +246,26 @@ export function TransactionsList() {
     if (!splitTransaction) return;
     const items = splitItems.map((item) => ({ ...item, amount: Number(item.amount) }));
     await saveTransactionSplits(splitTransaction.id, items);
+    setSplitRows((rows) => ({ ...rows, [splitTransaction.id]: items }));
+    setExpandedSplitIds((ids) => ids.includes(splitTransaction.id) ? ids : [...ids, splitTransaction.id]);
     setSplitTransaction(null);
     await refresh();
+  }
+  async function openSplitEditor(item: TransactionItem) {
+    const saved = await getTransactionSplits(item.id);
+    setSplitTransaction(item);
+    setSplitItems(saved.length
+      ? saved.map((part) => ({ categoryId: part.categoryId ?? '', amount: String(part.amount), memo: part.memo }))
+      : [{ categoryId: item.categoryId ?? '', amount: '', memo: '' }, { categoryId: '', amount: '', memo: '' }]);
+  }
+  async function toggleSplitRows(item: TransactionItem) {
+    if (expandedSplitIds.includes(item.id)) {
+      setExpandedSplitIds((ids) => ids.filter((id) => id !== item.id));
+      return;
+    }
+    const saved = await getTransactionSplits(item.id);
+    setSplitRows((rows) => ({ ...rows, [item.id]: saved }));
+    setExpandedSplitIds((ids) => [...ids, item.id]);
   }
   async function handleIrrelevant(id: string) {
     await markTransactionIrrelevant(id);
@@ -396,6 +429,16 @@ export function TransactionsList() {
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const visibleItems = filteredItems.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const summaryByCurrency = filteredItems.reduce<Record<string, { expenses: number; income: number; net: number }>>((summary, item) => {
+    const currency = item.currency || 'PLN';
+    const current = summary[currency] ?? { expenses: 0, income: 0, net: 0 };
+    if (item.amount < 0) current.expenses += Math.abs(item.amount);
+    if (item.amount > 0) current.income += item.amount;
+    current.net += item.amount;
+    summary[currency] = current;
+    return summary;
+  }, {});
+  const summaryCurrencies = Object.entries(summaryByCurrency);
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
@@ -550,9 +593,33 @@ export function TransactionsList() {
         {showCreateForm ? 'Zwiń ręczne dodawanie' : '+ Dodaj transakcję ręcznie'}
       </button>
       {showCreateForm && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-black/70 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowCreateForm(false);
+              setEditingId(null);
+              setForm(emptyForm);
+            }
+          }}
+        >
+        <div className="relative my-8 w-full max-w-6xl">
+        <button
+          type="button"
+          onClick={() => {
+            setShowCreateForm(false);
+            setEditingId(null);
+            setForm(emptyForm);
+          }}
+          aria-label="Zamknij okno edycji"
+          title="Zamknij"
+          className="absolute right-4 top-4 z-10 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-panel text-muted hover:text-white"
+        >
+          <X size={18} />
+        </button>
         <form
           onSubmit={handleSubmit}
-          className="grid items-start gap-4 rounded-2xl border border-line bg-white/5 p-5 md:grid-cols-4"
+          className="grid max-h-[calc(100vh-4rem)] w-full items-start gap-4 overflow-y-auto rounded-2xl border border-line bg-panel p-5 pr-28 shadow-2xl md:grid-cols-4"
         >
           <label className="flex flex-col gap-1 text-sm text-muted">
             Konto
@@ -655,27 +722,26 @@ export function TransactionsList() {
           </label>
           {editingId && form.direction === 'Expense' && (
             <label className="flex flex-col gap-1 text-sm text-muted md:col-span-2">
-              Połącz ze zwrotem
-              <select
-                value={form.refundTransactionId}
-                onChange={(event) => setForm({ ...form, refundTransactionId: event.target.value })}
-                className="rounded-xl border border-line bg-panel px-3 py-2 outline-none"
+              <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => setRefundPickerOpen(true)} className="inline-flex items-center gap-1 rounded-xl border border-line px-3 py-2 text-sm text-accent hover:border-accent">
+                <ArrowDownUp size={15} /> {form.refundTransactionId ? 'Edytuj zwrot' : 'Połącz ze zwrotem'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const transaction = items.find((item) => item.id === editingId);
+                  if (transaction) void openSplitEditor(transaction);
+                }}
+                className="inline-flex items-center gap-1 rounded-xl border border-line px-3 py-2 text-sm text-accent hover:border-accent"
               >
-                <option value="">Brak powiązania</option>
-                {items
-                  .filter((item) => item.transactionType === 'Income' && item.id !== editingId)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {new Date(item.occurredAt).toLocaleDateString('pl-PL')} · {item.description || 'Przychód'} · {item.amount.toFixed(2)} {item.currency}
-                    </option>
-                  ))}
-              </select>
-              <span className="text-xs text-muted">Zwrot pomniejsza koszt efektywny wydatku, ale nie zmienia kwot księgowych.</span>
+                <Split size={15} /> Podziel transakcję
+              </button>
+              </div>
             </label>
           )}
           <div className="md:col-span-4 flex gap-3">
             <button className="rounded-xl bg-accent px-4 py-2 text-black" type="submit">
-              {editingId ? 'Update transaction' : 'Create transaction'}
+              {editingId ? 'Zapisz zmiany' : 'Dodaj transakcję'}
             </button>
             {editingId && (
               <>
@@ -704,6 +770,8 @@ export function TransactionsList() {
             )}
           </div>
         </form>
+        </div>
+        </div>
       )}
 
       <div className="min-h-[420px] overflow-x-auto rounded-2xl border border-line">
@@ -1040,6 +1108,16 @@ export function TransactionsList() {
             </div>
           </div>
         )}
+        {refundPickerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-3xl rounded-2xl border border-line bg-panel p-6 shadow-2xl">
+              <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Zwrot</h2><button type="button" onClick={() => setRefundPickerOpen(false)} aria-label="Zamknij"><X size={18} /></button></div>
+              <p className="mt-2 text-sm text-muted">Znajdź zwrot, który chcesz połączyć z transakcją</p>
+              <div className="mt-6 flex gap-3"><input autoFocus value={refundSearch} onChange={(event) => setRefundSearch(event.target.value)} placeholder="Wyszukaj" className="flex-1 rounded-xl border border-accent bg-panel px-3 py-3" /><button type="button" className="rounded-xl border border-line px-4 text-muted">Bieżący miesiąc <ChevronDown size={15} className="ml-4 inline" /></button></div>
+              <div className="mt-5 max-h-80 space-y-2 overflow-y-auto">{items.filter((item) => item.direction === 'Income' && item.id !== editingId && `${item.description} ${item.counterpartyName ?? ''}`.toLowerCase().includes(refundSearch.toLowerCase())).map((item) => <button key={item.id} type="button" onClick={() => { setForm({ ...form, refundTransactionId: item.id }); setRefundPickerOpen(false); }} className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-left hover:border-accent"><span><span className="block text-sm text-muted">{new Date(item.occurredAt).toLocaleDateString('pl-PL')}</span><strong>{item.description || item.counterpartyName || 'Przychód'}</strong></span><span className="text-emerald-400">{item.amount.toFixed(2)} {item.currency}</span></button>)}{!items.some((item) => item.direction === 'Income' && item.id !== editingId) && <p className="py-12 text-center text-muted">Niestety nie znaleźliśmy żadnych transakcji, które mogą pasować do wybranego zwrotu</p>}</div>
+            </div>
+          </div>
+        )}
         <table className="w-full min-w-[1100px] table-fixed border-collapse text-left text-sm">
           <colgroup>
             <col className="w-[35px]" />
@@ -1091,7 +1169,8 @@ export function TransactionsList() {
           </thead>
           <tbody>
             {visibleItems.map((item) => (
-              <tr key={item.id} className="border-t border-line/80 bg-white/[0.02]">
+              <Fragment key={item.id}>
+              <tr className="border-t border-line/80 bg-white/[0.02]">
                 <td className="px-4 py-3 text-muted">
                   {bulkEdit && (
                     <input
@@ -1103,7 +1182,19 @@ export function TransactionsList() {
                   )}
                   {new Date(item.occurredAt).toLocaleDateString('pl-PL')}
                 </td>
-                <td className="w-64 whitespace-normal break-words px-4 py-3">{item.description}</td>
+                <td className="w-64 whitespace-normal break-words px-4 py-3">
+                  <div>{item.description}</div>
+                  {item.isSplit && (
+                    <span className="mt-1 inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+                      Podzielona
+                    </span>
+                  )}
+                  {item.refundTransactionId && (
+                    <span className="mt-1 inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-300">
+                      Ze zwrotem
+                    </span>
+                  )}
+                </td>
                 <td className="w-80 px-4 py-3">
                   <CategoryPicker
                     categories={categories}
@@ -1129,12 +1220,15 @@ export function TransactionsList() {
                 <td className="w-64 px-4 py-3">
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs"
+                      className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs"
                       onClick={() => startEdit(item)}
+                      aria-label="Edytuj transakcję"
+                      title="Edytuj transakcję"
                     >
-                      <Pencil size={13} /> Edytuj
+                      <Pencil size={13} />
                     </button>
-                    {item.transactionType === 'Expense' && <button className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs" onClick={() => { setSplitTransaction(item); setSplitItems([{ categoryId: item.categoryId ?? '', amount: '', memo: '' }, { categoryId: '', amount: '', memo: '' }]); }}><Split size={13} /> Podziel</button>}
+                    {item.direction === 'Expense' && <button className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs" onClick={() => openSplitEditor(item)} aria-label={item.isSplit ? 'Edytuj podział' : 'Podziel transakcję'} title={item.isSplit ? 'Edytuj podział' : 'Podziel transakcję'}><Split size={13} /></button>}
+                    {(item.isSplit || item.refundTransactionId) && <button className="inline-flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs" onClick={() => toggleSplitRows(item)} aria-label={expandedSplitIds.includes(item.id) ? 'Zwiń szczegóły' : 'Pokaż szczegóły'} title={expandedSplitIds.includes(item.id) ? 'Zwiń szczegóły' : 'Pokaż szczegóły'}>{expandedSplitIds.includes(item.id) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}</button>}
                     <button
                       className="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1 text-xs"
                       onClick={() => handleIrrelevant(item.id)}
@@ -1144,33 +1238,64 @@ export function TransactionsList() {
                   </div>
                 </td>
               </tr>
+              {expandedSplitIds.includes(item.id) && (splitRows[item.id] ?? []).map((part, index) => <tr key={`${item.id}-split-${index}`} className="bg-accent/[0.03] text-sm"><td className="px-4 py-2 text-muted">↳</td><td className="px-4 py-2 text-muted">{part.memo || item.description}</td><td className="px-4 py-2 text-muted">{categories.find((category) => category.id === part.categoryId)?.name ?? 'Bez kategorii'}</td><td className="px-4 py-2 font-medium text-rose-300">-{part.amount.toLocaleString('pl-PL', { style: 'currency', currency: item.currency })}</td><td /><td className="px-4 py-2 text-xs text-muted">Podtransakcja</td></tr>)}
+              {item.refundTransactionId && expandedSplitIds.includes(item.id) && (() => { const refund = items.find((candidate) => candidate.id === item.refundTransactionId); return refund ? <tr className="bg-emerald-400/[0.03] text-sm"><td className="px-4 py-2 text-muted">↳</td><td className="px-4 py-2 text-muted">{refund.description || 'Zwrot transakcji'}</td><td className="px-4 py-2 text-muted">Zwrot</td><td className="px-4 py-2 font-medium text-emerald-300">{refund.amount.toLocaleString('pl-PL', { style: 'currency', currency: refund.currency })}</td><td /><td className="px-4 py-2 text-xs text-muted">Zwrot</td></tr> : null; })()}
+              </Fragment>
             ))}
           </tbody>
         </table>
-        <div className="flex items-center justify-between border-t border-line bg-white/[0.03] px-4 py-3 text-sm">
-          <button
+        <div className="border-y border-line bg-accent/[0.04] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <div>
+              <span className="block text-xs uppercase tracking-wide text-muted">Podsumowanie filtrów</span>
+              <strong>{filteredItems.length} {filteredItems.length === 1 ? 'transakcja' : 'transakcji'}</strong>
+            </div>
+            {summaryCurrencies.map(([currency, summary]) => (
+              <Fragment key={currency}>
+                <div>
+                  <span className="block text-xs text-muted">Wydatki</span>
+                  <strong className="text-rose-300">-{formatSummaryAmount(summary.expenses, currency)}</strong>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted">Przychody</span>
+                  <strong className="text-emerald-300">{formatSummaryAmount(summary.income, currency)}</strong>
+                </div>
+                <div>
+                  <span className="block text-xs text-muted">Bilans</span>
+                  <strong className={summary.net < 0 ? 'text-rose-300' : 'text-emerald-300'}>{formatSummaryAmount(summary.net, currency)}</strong>
+                </div>
+              </Fragment>
+            ))}
+            {!summaryCurrencies.length && <span className="text-muted">Brak transakcji dla wybranych filtrów</span>}
+          </div>
+          <p className="mt-2 text-xs text-muted">Kwoty obejmują wszystkie wyniki filtrowania, również te na kolejnych stronach.</p>
+        </div>
+        <div className="relative flex items-center justify-center border-t border-line bg-white/[0.03] px-4 py-3 text-sm">
+          <div className="flex items-center gap-8">
+            <button
             type="button"
             disabled={safePage <= 1}
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             className="flex items-center gap-2 text-muted hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ChevronLeft size={18} /> Poprzednia
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg bg-accent px-3 py-2 font-medium text-black">
-              {safePage}
-            </span>
-            <span className="text-muted">z {totalPages}</span>
-          </div>
-          <button
+            >
+              <ChevronLeft size={18} /> Poprzednia
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="rounded-lg bg-accent px-3 py-2 font-medium text-black">
+                {safePage}
+              </span>
+              <span className="text-muted">z {totalPages}</span>
+            </div>
+            <button
             type="button"
             disabled={safePage >= totalPages}
             onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
             className="flex items-center gap-2 text-muted hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Następna <ChevronRight size={18} />
-          </button>
-          <label className="flex items-center gap-2 text-sm text-muted">
+            >
+              Następna <ChevronRight size={18} />
+            </button>
+          </div>
+          <label className="absolute right-4 flex items-center gap-2 text-sm text-muted">
             Pokaż
             <select
               value={pageSize}
@@ -1332,6 +1457,7 @@ export function CategoryPicker({
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const pickerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -1367,7 +1493,20 @@ export function CategoryPicker({
     <div ref={pickerRef} className={`relative ${compact ? 'w-full max-w-80' : 'w-full'}`}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open && pickerRef.current) {
+            const rect = pickerRef.current.getBoundingClientRect();
+            const preferredHeight = Math.min(384, window.innerHeight - 16);
+            const opensUp = rect.bottom + preferredHeight > window.innerHeight;
+            setMenuStyle({
+              left: rect.left,
+              top: opensUp ? Math.max(8, rect.top - preferredHeight - 4) : rect.bottom + 4,
+              width: rect.width,
+              maxHeight: preferredHeight,
+            });
+          }
+          setOpen(!open);
+        }}
         className="flex w-full min-w-[160px] items-center justify-between rounded-xl border border-line bg-panel px-3 py-2 text-left text-sm transition hover:border-accent/70"
       >
         <span className="flex items-center gap-2 truncate">
@@ -1379,7 +1518,7 @@ export function CategoryPicker({
         </span>
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
+        <div style={menuStyle} className="fixed z-[100] max-h-[min(24rem,calc(100vh-1rem))] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl">
           <div className="border-b border-line p-2">
             <div className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2">
               <Search size={18} className="text-muted" />

@@ -14,4 +14,5 @@ public sealed record TransactionListItem(
     Guid? CategoryId,
     string TransactionType,
     string? ExternalTransactionId,
-    Guid? RefundTransactionId);
+    Guid? RefundTransactionId,
+    bool IsSplit);

@@ -22,7 +22,13 @@ public sealed class BudgetsController : ControllerBase
         var end = start.AddMonths(1).AddDays(-1);
         var startUtc = new DateTimeOffset(start.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var endUtc = new DateTimeOffset(start.AddMonths(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        var result = await db.Budgets.Where(x => x.UserId == userId.Value && x.StartDate == start).SelectMany(x => db.BudgetItems.Where(i => i.BudgetId == x.Id).Select(i => new { i.Id, i.BudgetId, i.CategoryId, i.PlannedAmount, i.Comment, x.StartDate, x.Currency, ActualAmount = -db.Transactions.Where(t => t.UserId == userId.Value && t.CategoryId == i.CategoryId && t.OccurredAt >= startUtc && t.OccurredAt < endUtc && t.Amount < 0 && t.Status != "Ignored").Sum(t => (decimal?)t.Amount) ?? 0m })).ToListAsync(ct);
+        var budget = await db.Budgets.FirstOrDefaultAsync(x => x.UserId == userId.Value && x.StartDate == start, ct);
+        if (budget is null) return Ok(Array.Empty<object>());
+        var budgetItems = await db.BudgetItems.Where(x => x.BudgetId == budget.Id).ToListAsync(ct);
+        var transactions = await db.Transactions.AsNoTracking().Where(t => t.UserId == userId.Value && t.OccurredAt >= startUtc && t.OccurredAt < endUtc && t.Amount < 0 && t.Status != "Ignored").Select(t => new { t.CategoryId, t.Amount, t.RefundTransactionId }).ToListAsync(ct);
+        var refundIds = transactions.Where(t => t.RefundTransactionId.HasValue).Select(t => t.RefundTransactionId!.Value).ToHashSet();
+        var refundAmounts = await db.Transactions.AsNoTracking().Where(t => refundIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id, t => t.Amount, ct);
+        var result = budgetItems.Select(i => new { i.Id, i.BudgetId, i.CategoryId, i.PlannedAmount, i.Comment, StartDate = budget.StartDate, Currency = budget.Currency, ActualAmount = transactions.Where(t => t.CategoryId == i.CategoryId).Sum(t => -(t.Amount + (t.RefundTransactionId.HasValue && refundAmounts.TryGetValue(t.RefundTransactionId.Value, out var refund) ? refund : 0m))) }).ToList();
         return Ok(result);
     }
 

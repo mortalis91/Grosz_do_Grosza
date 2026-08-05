@@ -24,7 +24,7 @@ public sealed class ImportsController : ControllerBase
 
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Import([FromForm] IFormFile file, [FromForm] Guid accountId, [FromForm] string? categoryMapping, CancellationToken cancellationToken)
+    public async Task<IActionResult> Import(IFormFile file, [FromForm] Guid accountId, [FromForm] string? categoryMapping, CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
         if (!userId.HasValue) return Unauthorized();

@@ -1,6 +1,6 @@
-# Personal Finance Manager - Architecture
+# Menedżer finansów osobistych — architektura
 
-## Purpose
+## Cel
 
 This repository will host a commercial-grade Personal Finance Manager inspired by Kontomierz, YNAB, Wallet, and Portfolio Performance, but broader in scope:
 
@@ -15,7 +15,7 @@ This repository will host a commercial-grade Personal Finance Manager inspired b
 
 The solution is designed as a modular monolith first, with clear seams that allow future service extraction if required.
 
-## Architectural Principles
+## Zasady architektury
 
 - Clean Architecture
 - SOLID
@@ -26,7 +26,7 @@ The solution is designed as a modular monolith first, with clear seams that allo
 - infrastructure isolated behind interfaces
 - testability as a first-class requirement
 
-## System Overview
+## Przegląd systemu
 
 ### Frontend
 
@@ -54,7 +54,7 @@ The solution is designed as a modular monolith first, with clear seams that allo
 - Swagger / OpenAPI
 - JWT authentication
 
-## Implemented MVP scope
+## Zakres zrealizowanego MVP
 
 The current implementation is a modular monolith with PostgreSQL and a Next.js
 frontend. The implemented vertical slices are authentication, accounts and
@@ -64,7 +64,7 @@ Transactions use soft deletion through the `Archived` status and exclude
 list below describes the target architecture and is not a claim that every
 module is implemented.
 
-### Supporting Infrastructure
+### Infrastruktura pomocnicza
 
 - PostgreSQL as the source of truth
 - Redis for caching, background job coordination, and short-lived states
@@ -72,7 +72,7 @@ module is implemented.
 - Docker and Docker Compose for local development and deployment parity
 - GitHub Actions for CI
 
-## High-Level Boundaries
+## Granice wysokiego poziomu
 
 The backend is structured as a modular monolith with bounded contexts:
 
@@ -100,7 +100,7 @@ Each module owns:
 - API contracts
 - tests
 
-## Repository Layout
+## Struktura repozytorium
 
 The codebase will follow this structure:
 
@@ -124,9 +124,9 @@ tests/
 docs/
 ```
 
-### Backend Layers
+### Warstwy backendu
 
-#### Domain
+#### Domena
 
 Contains:
 
@@ -144,7 +144,7 @@ Rules:
 - no HTTP concepts
 - no infrastructure references
 
-#### Application
+#### Aplikacja
 
 Contains:
 
@@ -162,7 +162,7 @@ Rules:
 - no direct database access
 - no HTTP-specific code
 
-#### Infrastructure
+#### Infrastruktura
 
 Contains:
 
@@ -187,7 +187,7 @@ Contains:
 - Swagger setup
 - exception mapping
 
-## Frontend Architecture
+## Architektura frontendu
 
 The frontend will be organized by feature rather than by technical layer only.
 
@@ -218,7 +218,7 @@ Frontend rules:
 - TanStack Table for transaction grids
 - reusable design system components in `shadcn/ui`
 
-## Domain Model Strategy
+## Strategia modelu domenowego
 
 The domain will be centered around these core aggregates:
 
@@ -248,9 +248,9 @@ Supporting concepts:
 - `ImportSource`
 - `RuleCondition`
 
-## Data Flow
+## Przepływ danych
 
-### Transaction Import
+### Import transakcji
 
 1. CSV, MT940, OFX, or bank-specific parser ingests raw data.
 2. Raw rows are normalized into a canonical import model.
@@ -260,21 +260,21 @@ Supporting concepts:
 6. Account balances and derived summaries are recalculated.
 7. Import history and logs are stored.
 
-### Dashboard and Reports
+### Dashboard i raporty
 
 1. Frontend requests a summary endpoint.
 2. Application layer composes read models.
 3. Infrastructure reads from the database and cached projections.
 4. API returns aggregated data optimized for charts and tables.
 
-### AI and Search
+### AI i wyszukiwanie
 
 1. User asks a natural-language question.
 2. The query is classified into intent.
 3. Relevant transactions, categories, accounts, or reports are retrieved.
 4. The result is converted into a human-readable answer plus structured data.
 
-## API Design
+## Projekt API
 
 The API will be REST-first and versioned.
 
@@ -287,7 +287,7 @@ Guidelines:
 - validation errors use a consistent problem-details response
 - authentication via JWT bearer tokens
 
-## Persistence Strategy
+## Strategia trwałości danych
 
 PostgreSQL schema will be designed around:
 
@@ -298,7 +298,7 @@ PostgreSQL schema will be designed around:
 
 EF Core migrations will be the default schema evolution mechanism.
 
-## Background Processing
+## Przetwarzanie w tle
 
 Hangfire will be used for:
 
@@ -311,7 +311,7 @@ Hangfire will be used for:
 - AI enrichment tasks
 - report precomputation
 
-## Security Requirements
+## Wymagania bezpieczeństwa
 
 - JWT authentication
 - role-based authorization
@@ -320,7 +320,7 @@ Hangfire will be used for:
 - input validation everywhere
 - protection against duplicate imports and replayed commands
 
-## Testing Strategy
+## Strategia testów
 
 ### Backend
 
@@ -335,7 +335,7 @@ Hangfire will be used for:
 - page and flow tests for main journeys
 - form validation tests
 
-## Delivery Stages
+## Etapy dostarczania
 
 This project will be implemented incrementally:
 
@@ -354,6 +354,6 @@ This project will be implemented incrementally:
 13. Docker and deployment
 14. documentation
 
-## Current Decision
+## Bieżąca decyzja
 
 The first implementation target should be the backend foundation plus the Pekao CSV import path, because that creates the first vertical slice of real value and validates the core financial data model early.

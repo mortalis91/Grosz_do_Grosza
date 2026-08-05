@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getDashboardSummary, type DashboardSummary } from "@/lib/api";
 import { readToken } from "@/lib/session";
@@ -23,6 +24,30 @@ const months = [
   "Grudzień",
 ];
 
+const basicLivingCategories = [
+  { label: "Żywność", exact: "Spożywcze" },
+  { label: "Chemia", exact: "Chemia" },
+  { label: "Zdrowie", parent: "Zdrowie" },
+  { label: "Telefon", exact: "Komórka" },
+  { label: "Internet", exact: "Internet" },
+  { label: "Zwierzęta", parent: "Zwierzęta" },
+  { label: "Edukacja", parent: "Edukacja" },
+  { label: "Rozrywka", parent: "Rozrywka" },
+  { label: "Ubrania", exact: "Odzież i obuwie" },
+  { label: "Czynsz obecny", exact: "Czynsz i wynajem" },
+];
+
+const housingCostFields = [
+  ["Rata kredytu", "mortgage"],
+  ["Czynsz / utrzymanie domu", "maintenance"],
+  ["Media", "utilities"],
+  ["Ubezpieczenie nieruchomości", "insurance"],
+  ["Podatek od nieruchomości", "propertyTax"],
+  ["Dojazdy", "commute"],
+  ["Serwis i naprawy", "repairs"],
+  ["Inne zobowiązania", "other"],
+] as const;
+
 function currency(value: number) {
   return new Intl.NumberFormat("pl-PL", {
     style: "currency",
@@ -31,6 +56,8 @@ function currency(value: number) {
 }
 
 export default function ReportsPage() {
+  const pathname = usePathname();
+  const isPlanning = pathname === "/planning";
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<Array<DashboardSummary | null>>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +66,8 @@ export default function ReportsPage() {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [rates, setRates] = useState<Record<string, number>>({ PLN: 1 });
   const [ratesDate, setRatesDate] = useState<string | null>(null);
+  const [housingCosts, setHousingCosts] = useState<Record<string, number>>({});
+  const [bufferPercent, setBufferPercent] = useState(10);
 
   useEffect(() => {
     let active = true;
@@ -110,9 +139,14 @@ export default function ReportsPage() {
     expenses: Math.abs(item?.expenses ?? 0),
     net: (item?.income ?? 0) + (item?.expenses ?? 0),
   }));
+  const currentYear = new Date().getFullYear();
+  const monthsInAverage = year === currentYear ? new Date().getMonth() + 1 : 12;
   const income = rows.reduce((sum, row) => sum + row.income, 0);
   const expenses = rows.reduce((sum, row) => sum + row.expenses, 0);
+  const averageIncome = income / monthsInAverage;
   const max = Math.max(...rows.flatMap((row) => [row.income, row.expenses]), 1);
+  const amountsById = new Map(transactions.map((item) => [item.id, item.amount]));
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
   const spendingByCategory = Object.entries(
     transactions
       .filter((item) => item.amount < 0 && item.status !== "Ignored")
@@ -120,15 +154,35 @@ export default function ReportsPage() {
         const name =
           categories.find((category) => category.id === item.categoryId)
             ?.name ?? "Bez kategorii";
-        result[name] = (result[name] ?? 0) + Math.abs(item.amount);
+        const refund = item.refundTransactionId ? amountsById.get(item.refundTransactionId) ?? 0 : 0;
+        result[name] = (result[name] ?? 0) + Math.abs(item.amount + refund);
         return result;
       }, {}),
   )
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
-  const categoryById = new Map(
-    categories.map((category) => [category.id, category]),
-  );
+  const basicLivingByCategory = basicLivingCategories.map(({ label, exact, parent }) => {
+    const value = transactions
+      .filter((item) => item.amount < 0 && item.status !== "Ignored")
+      .filter((item) => {
+        let category = categoryById.get(item.categoryId ?? "");
+        while (category) {
+          const categoryName = category.name.toLocaleLowerCase();
+          if ((exact && categoryName === exact.toLocaleLowerCase()) || (parent && categoryName === parent.toLocaleLowerCase())) return true;
+          category = category.parentId ? categoryById.get(category.parentId) : undefined;
+        }
+        return false;
+      })
+      .reduce((sum, item) => {
+        const refund = item.refundTransactionId ? amountsById.get(item.refundTransactionId) ?? 0 : 0;
+        return sum + Math.abs(item.amount + refund);
+      }, 0);
+    return [label, value / monthsInAverage] as [string, number];
+  });
+  const averageBasicLiving = basicLivingByCategory.reduce((sum, [, value]) => sum + value, 0);
+  const monthlyHousing = Object.values(housingCosts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const housingBuffer = monthlyHousing * (Number(bufferPercent) || 0) / 100;
+  const remainingAfterHousing = averageIncome - averageBasicLiving - monthlyHousing - housingBuffer;
   const incomeParentIds = new Set(
     categories
       .filter((category) => category.name === "Przychód" && !category.parentId)
@@ -167,6 +221,8 @@ export default function ReportsPage() {
   return (
     <AppShell>
       <section className="space-y-6 rounded-3xl border border-line bg-panel/80 p-6">
+        {!isPlanning && (
+          <>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold">Raporty</h1>
@@ -210,6 +266,85 @@ export default function ReportsPage() {
             </strong>
           </div>
         </div>
+          </>
+        )}
+        {isPlanning && (
+        <div className="rounded-2xl border border-accent/30 bg-accent/[0.04] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold">Budżet mieszkaniowy</h2>
+              <p className="mt-1 text-sm text-muted">Średnie miesięczne koszty na podstawie ostatnich 12 miesięcy oraz planowanych kosztów po zakupie nieruchomości.</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              Rok
+              <select
+                value={year}
+                onChange={(event) => setYear(Number(event.target.value))}
+                className="rounded-xl border border-line bg-panel px-3 py-2 text-white"
+              >
+                {Array.from({ length: 5 }, (_, index) => year - 2 + index).map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-5 grid gap-4 xl:grid-cols-3">
+            <div className="rounded-2xl border border-line bg-white/5 p-4">
+              <h3 className="font-semibold">1. Dochód</h3>
+              <div className="mt-4 flex items-end justify-between gap-3">
+                <span className="text-sm text-muted">Średni dochód netto / miesiąc</span>
+                <strong className="text-xl text-emerald-300">{currency(averageIncome)}</strong>
+              </div>
+              <p className="mt-2 text-xs text-muted">Suma dochodów podzielona przez {monthsInAverage} {monthsInAverage === 1 ? "miesiąc" : "miesięcy"} uwzględnionych w bieżącym okresie.</p>
+            </div>
+            <div className="rounded-2xl border border-line bg-white/5 p-4 xl:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-semibold">2. Podstawowe koszty życia</h3>
+                <strong className="text-xl text-rose-300">{currency(averageBasicLiving)}</strong>
+              </div>
+              <p className="mt-1 text-xs text-muted">Średnia miesięczna z {monthsInAverage} {monthsInAverage === 1 ? "miesiąca" : "miesięcy"}, według kategorii.</p>
+              <div className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {basicLivingByCategory.map(([name, value]) => (
+                  <div key={name} className="flex items-center justify-between gap-3 border-b border-line/60 py-1.5 text-sm">
+                    <span className="text-muted">{name}</span>
+                    <span>{currency(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-line bg-white/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">3. Planowane koszty mieszkaniowe</h3>
+                <p className="mt-1 text-xs text-muted">Wpisz przewidywane miesięczne koszty po zakupie.</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-muted">
+                Bufor bezpieczeństwa
+                <input type="number" min="0" max="100" value={bufferPercent} onChange={(event) => setBufferPercent(Number(event.target.value))} className="w-20 rounded-xl border border-line bg-panel px-3 py-2 text-white" />%
+              </label>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {housingCostFields.map(([label, key]) => (
+                <label key={key} className="text-sm text-muted">
+                  {label}
+                  <div className="mt-1 flex items-center rounded-xl border border-line bg-panel px-3">
+                    <input type="number" min="0" step="0.01" value={housingCosts[key] ?? ""} onChange={(event) => setHousingCosts((current) => ({ ...current, [key]: Number(event.target.value) }))} placeholder="0" className="w-full bg-transparent py-2 text-white outline-none" />
+                    <span className="text-xs">zł</span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-line bg-white/5 p-4"><span className="text-sm text-muted">Koszty mieszkaniowe</span><strong className="mt-2 block text-xl text-rose-300">{currency(monthlyHousing)}</strong></div>
+            <div className="rounded-2xl border border-line bg-white/5 p-4"><span className="text-sm text-muted">Bufor ({bufferPercent}%)</span><strong className="mt-2 block text-xl text-amber-300">{currency(housingBuffer)}</strong></div>
+            <div className={`rounded-2xl border p-4 ${remainingAfterHousing >= 0 ? "border-emerald-400/30 bg-emerald-400/10" : "border-rose-400/30 bg-rose-400/10"}`}><span className="text-sm text-muted">Pozostaje po zakupie</span><strong className={`mt-2 block text-xl ${remainingAfterHousing >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{currency(remainingAfterHousing)}</strong></div>
+          </div>
+        </div>
+        )}
+        {!isPlanning && (
+          <>
         <div className="rounded-2xl border border-line bg-white/5 p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Zestawienie roczne</h2>
@@ -316,6 +451,8 @@ export default function ReportsPage() {
           />
           <CashFlowReport rows={rows} />
         </div>
+          </>
+        )}
       </section>
     </AppShell>
   );

@@ -74,13 +74,19 @@ public sealed class DashboardController : ControllerBase
 
         var balance = accounts.Sum(x => x.CurrentBalance * GetPlnRate(x.Currency));
 
-        var income = await transactions
-            .Where(x => x.Amount > 0 && x.Status != "Ignored")
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
-
-        var expenses = await transactions
-            .Where(x => x.Amount < 0 && x.Status != "Ignored")
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var transactionValues = await transactions
+            .Where(x => x.Status != "Ignored")
+            .Select(x => new { x.Id, x.Amount, x.Direction, x.RefundTransactionId })
+            .ToListAsync(cancellationToken);
+        var linkedRefundIds = transactionValues.Where(x => x.RefundTransactionId.HasValue)
+            .Select(x => x.RefundTransactionId!.Value).ToHashSet();
+        var refundAmounts = transactionValues.ToDictionary(x => x.Id, x => x.Amount);
+        var income = transactionValues
+            .Where(x => x.Amount > 0 && !linkedRefundIds.Contains(x.Id))
+            .Sum(x => x.Amount);
+        var expenses = transactionValues
+            .Where(x => x.Amount < 0)
+            .Sum(x => x.Amount + (x.RefundTransactionId.HasValue && refundAmounts.TryGetValue(x.RefundTransactionId.Value, out var refund) ? refund : 0m));
 
         return Ok(new DashboardSummaryResponse(balance, income, expenses, balance, recentTransactions, topSpendingCategories));
     }

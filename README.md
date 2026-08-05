@@ -12,6 +12,8 @@ Personal Finance Manager built with:
 - PostgreSQL persistence and EF Core migrations are implemented.
 - Accounts support bank, brokerage, deposit and pension account types, currencies and current balances.
 - Transactions support manual entry, CSV import, categorization, filtering, sorting, editing, soft deletion and bulk actions.
+- Transaction filtering displays a summary for all filtered results, including transaction count, expenses, income and net balance grouped by currency.
+- Manual transaction creation and editing open in a modal window. The modal can be closed with the `X` button or by clicking outside it; after saving, it closes automatically. The action labels are `Dodaj transakcję` and `Zapisz zmiany`. Category pickers use an independent scrollable layer and open upward when needed.
 - Categories support groups, subcategories, icons, colors, editing, alphabetical ordering and deletion.
 - Dashboard supports monthly summaries, annual charts and PLN conversion for non-PLN balances.
 - The `Przychody vs Wydatki` chart supports day, week, month, year and all-time ranges. Transactions marked as `Ignored` are excluded from its calculations.
@@ -19,6 +21,12 @@ Personal Finance Manager built with:
 - CSV import requires selecting an account first; after import the selected file name is shown and a detailed `.txt` log can be downloaded.
 - Budgets support monthly category planning, comments, actual spending, remaining amounts and deletion.
 - Expenses can be linked to income transactions representing refunds.
+- Expenses can be split into child transactions with separate categories, amounts and descriptions. Child amounts must sum to the parent expense amount.
+- Linked refunds are represented as child rows in the transaction list and reduce the expense used in dashboard and reporting calculations.
+- Reports include a separate `Planowanie` section with the `Budżet mieszkaniowy` report.
+- The housing budget reports average monthly net income and basic living costs, accepts planned housing costs, applies a configurable safety buffer and calculates the amount remaining after the planned purchase.
+- Basic living costs use available categories: `Spożywcze`, `Chemia`, `Zdrowie` and its subcategories, `Komórka`, `Internet`, `Zwierzęta` and its subcategories, `Edukacja` and its subcategories, `Rozrywka` and its subcategories, `Odzież i obuwie`, and current rent from `Czynsz i wynajem`.
+- For the current year, monthly averages are divided by the number of months already started; completed years use all 12 months. The planning report supports selecting another year.
 
 Detailed functional requirements and current behavior are documented in [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
@@ -32,8 +40,8 @@ Detailed functional requirements and current behavior are documented in [`REQUIR
 ## Next step
 
 Continue with automated tests for the implemented transaction import, filtering,
-categorization and dashboard rules. Planned modules such as budgets, goals,
-investments, recurring payments and AI classification remain outside the current MVP.
+categorization, dashboard rules and the housing planning report. PDF export of the
+planning report and persistent storage of planned housing costs remain future work.
 
 ## Local PostgreSQL
 
@@ -135,6 +143,27 @@ Przykład: wydatek `-879,97 PLN` i zwrot `+529,98 PLN` dają koszt efektywny
 `-349,99 PLN`. Saldo konta nadal korzysta z pełnych, rzeczywistych operacji
 bankowych. API dodatkowo sprawdza, że zwrot jest przychodem tego samego
 użytkownika i nie jest tą samą transakcją.
+
+## Podział transakcji
+
+Transakcję typu **Wydatek** można podzielić na podtransakcje. Każda część może
+mieć własną kategorię, kwotę i opis. Suma podtransakcji musi być równa kwocie
+transakcji głównej. Transakcja główna pozostaje operacją bankową i jest
+rozwijana na liście, aby pokazać podział.
+
+## Wartość netto w zestawieniach
+
+Jeżeli wydatek ma przypisany zwrot, w zestawieniach finansowych używana jest
+wartość netto:
+
+```text
+wydatek netto = kwota wydatku + kwota zwrotu
+```
+
+Przykład: `-879,97 PLN` oraz `+529,98 PLN` daje `-349,99 PLN`. Powiązany zwrot
+nie jest wtedy liczony drugi raz jako osobny przychód. Ta reguła jest używana
+w podsumowaniu dashboardu, wykresie przychodów i wydatków, raportach oraz
+budżetach.
 
 ## Usuwanie konta
 

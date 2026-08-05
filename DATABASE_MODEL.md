@@ -1,6 +1,6 @@
-# Database Model
+# Model bazy danych
 
-## Goals
+## Cele
 
 The database must support:
 
@@ -13,7 +13,7 @@ The database must support:
 
 The model is designed for PostgreSQL and EF Core.
 
-## Design Principles
+## Zasady projektowe
 
 - use UUID primary keys for all core tables
 - keep money values as decimal with explicit currency
@@ -22,7 +22,7 @@ The model is designed for PostgreSQL and EF Core.
 - optimize reads with targeted indexes, not premature denormalization
 - support soft delete where business meaning requires historical retention
 
-## Core Entities
+## Główne encje
 
 ### Users
 
@@ -422,7 +422,7 @@ Key fields:
 - `CorrelationId`
 - `OccurredAt`
 
-## Supporting Tables
+## Tabele pomocnicze
 
 ### AccountBalanceSnapshots
 
@@ -465,7 +465,7 @@ Fields:
 - `CreatedAt`
 - `UpdatedAt`
 
-## Raw Import Model
+## Model surowego importu
 
 Raw file rows must be preserved for troubleshooting and reprocessing.
 
@@ -476,7 +476,7 @@ Suggested tables:
 
 This is especially important for bank parsers like Pekao, PKO, ING, Santander, mBank, Revolut, MT940, and OFX.
 
-## Key Relationships
+## Kluczowe relacje
 
 ```mermaid
 erDiagram
@@ -504,7 +504,7 @@ erDiagram
   IMPORTS ||--o{ IMPORT_FILE_ROWS : contains
 ```
 
-## Index Strategy
+## Strategia indeksowania
 
 Recommended indexes:
 
@@ -519,7 +519,7 @@ Recommended indexes:
 - `Imports(UserId, AccountId, CreatedAt DESC)`
 - `AuditLog(UserId, OccurredAt DESC)`
 
-## Constraints
+## Ograniczenia
 
 Important constraints:
 
@@ -530,7 +530,7 @@ Important constraints:
 - transaction split totals should equal the parent transaction amount
 - only one active budget definition per period and scope when business rules require it
 
-## Money Handling
+## Obsługa pieniędzy
 
 Money should be stored as:
 
@@ -539,7 +539,7 @@ Money should be stored as:
 
 For instruments or crypto where higher precision is needed, use a dedicated precision strategy in the relevant tables.
 
-## Practical Notes for EF Core
+## Praktyczne uwagi dotyczące EF Core
 
 - use shadow properties sparingly
 - configure owned value objects for money and identifiers where appropriate
@@ -547,7 +547,7 @@ For instruments or crypto where higher precision is needed, use a dedicated prec
 - define concurrency tokens on mutation-heavy aggregates
 - add query-specific read models only when profiling shows a need
 
-## Implementation Order
+## Kolejność implementacji
 
 1. identity and users
 2. accounts and categories

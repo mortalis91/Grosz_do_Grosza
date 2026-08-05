@@ -164,6 +164,8 @@ function IncomeExpenseChart({ transactions, range, onRangeChange }: { transactio
       ? new Date(end.getTime() - (config.days - 1) * 86400000)
       : new Date(Math.min(...transactions.map((item) => new Date(item.occurredAt).getTime()), end.getTime()));
   const buckets = new Map<string, { label: string; income: number; expenses: number; time: number }>();
+  const linkedRefundIds = new Set(transactions.flatMap((item) => item.refundTransactionId ? [item.refundTransactionId] : []));
+  const amountsById = new Map(transactions.map((item) => [item.id, item.amount]));
   if (config.unit === "day" && config.days) {
     for (let index = 0; index < config.days; index += 1) {
       const date = new Date(start);
@@ -181,7 +183,12 @@ function IncomeExpenseChart({ transactions, range, onRangeChange }: { transactio
     const key = config.unit === "month" ? `${bucketDate.getFullYear()}-${bucketDate.getMonth()}` : bucketDate.toISOString().slice(0, 10);
     const label = config.unit === "month" ? bucketDate.toLocaleDateString("pl-PL", { month: "long", year: "numeric" }) : bucketDate.toLocaleDateString("pl-PL", { day: "numeric", month: "short" });
     const bucket = buckets.get(key) ?? { label, income: 0, expenses: 0, time: bucketDate.getTime() };
-    if (item.amount >= 0) bucket.income += item.amount; else bucket.expenses += Math.abs(item.amount);
+    if (item.amount >= 0) {
+      if (!linkedRefundIds.has(item.id)) bucket.income += item.amount;
+    } else {
+      const refund = item.refundTransactionId ? amountsById.get(item.refundTransactionId) ?? 0 : 0;
+      bucket.expenses += Math.abs(item.amount + refund);
+    }
     buckets.set(key, bucket);
   });
   const points = Array.from(buckets.values()).sort((a, b) => a.time - b.time);

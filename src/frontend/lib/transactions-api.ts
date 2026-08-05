@@ -15,11 +15,17 @@ export type TransactionItem = {
   transactionType: string;
   externalTransactionId?: string | null;
   refundTransactionId?: string | null;
+  isSplit?: boolean;
 };
 export type TransactionSplit = { id?: string; categoryId: string; amount: number; memo: string };
 export async function saveTransactionSplits(id: string, items: TransactionSplit[]) {
   const response = await authFetch(`/api/v1/transactions/${id}/splits`, { method: "PUT", body: JSON.stringify({ items }) });
   if (!response.ok) throw new Error("Nie udało się zapisać podziału transakcji.");
+}
+export async function getTransactionSplits(id: string) {
+  const response = await authFetch(`/api/v1/transactions/${id}/splits`);
+  if (!response.ok) return [] as TransactionSplit[];
+  return (await response.json()) as TransactionSplit[];
 }
 
 export async function getTransactions(page = 1, pageSize = 25) {
@@ -69,9 +75,7 @@ export async function updateTransaction(
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    throw new Error("Failed to update transaction");
-  }
+  if (!response.ok) throw new Error((await response.text()) || "Nie udało się zaktualizować transakcji.");
 }
 
 export async function archiveTransaction(id: string) {
