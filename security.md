@@ -6,14 +6,14 @@ Metoda: statyczny przegląd kodu i konfiguracji, analiza zależności/builda ora
 
 ## Podsumowanie zarządcze
 
-Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsze blokery to:
+Aplikacja nadal nie jest gotowa do publicznego wdrożenia produkcyjnego, ale część krytycznych poprawek została wdrożona i zweryfikowana:
 
-1. Dostęp użytkownika do danych innego użytkownika w regułach kategorii i endpointach transakcji (IDOR / wadliwa autoryzacja obiektowa).
-2. Hasła bazy danych i JWT zapisane bezpośrednio w konfiguracji, w tym awaryjny klucz JWT dla developmentu.
-3. Brak limitowania żądań i blokady konta przy logowaniu/rejestracji.
-4. Brak limitów przesyłania plików oraz kontroli zasobów podczas przetwarzania CSV.
-5. Brak wymuszenia HTTPS, nagłówków bezpieczeństwa i produkcyjnej konfiguracji CORS.
-6. Tokeny dostępowe są przechowywane w `localStorage`, co umożliwia ich kradzież po XSS lub przejęciu klienta.
+1. Naprawiono IDOR odczytu transakcji i reguł kategorii; wykonane testy dwóch użytkowników zwracają `404` dla cudzych danych.
+2. Usunięto fallback JWT i jawne sekrety z bazowego `appsettings.json`; Compose wymaga zewnętrznego `POSTGRES_PASSWORD`.
+3. Dodano rate limiting logowania i rejestracji: 10 żądań na minutę na adres IP.
+4. Dodano podstawowe limity i walidację importu CSV.
+5. Dodano nagłówki bezpieczeństwa, globalny `ProblemDetails`, HTTPS redirect i HSTS poza Development.
+6. Nadal nierozwiązany pozostaje token JWT przechowywany w `localStorage` oraz pełna migracja do HttpOnly cookie/BFF.
 
 ## Podsumowanie ryzyka
 
@@ -26,7 +26,7 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 ## Ustalenia
 
-### SEC-01 — Wadliwa autoryzacja obiektowa transakcji — wysokie
+### SEC-01 — Wadliwa autoryzacja obiektowa transakcji — naprawione
 
 **Zagrożenie:** Uwierzytelniony użytkownik znający UUID innej transakcji może ją odczytać. Ujawnia to dane finansowe i stanowi IDOR (OWASP A01:2021).
 
@@ -34,7 +34,9 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Dodać `x.Id == id && x.UserId == userId.Value`, a dla obcego obiektu zwracać `NotFound()`. Dodać testy odczytu, edycji, usuwania i splitów dla dwóch użytkowników.
 
-### SEC-02 — Wadliwa autoryzacja obiektowa reguł kategorii — wysokie
+**Status:** Filtr właściciela został dodany. Test dynamiczny użytkownik A kontra użytkownik B potwierdził `404`.
+
+### SEC-02 — Wadliwa autoryzacja obiektowa reguł kategorii — naprawione
 
 **Zagrożenie:** Reguły kategorii można enumerować między użytkownikami oraz tworzyć/aktualizować z dowolnym `request.UserId`. Umożliwia to ujawnienie i modyfikację cudzych danych.
 
@@ -42,7 +44,9 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Ignorować `userId` z query/body i wyznaczać właściciela wyłącznie przez `User.GetUserId()`. Dodać `x.UserId == currentUserId` w `GetAll`, `GetById` i `Update`; sprawdzać, czy `CategoryId` należy do tego samego użytkownika.
 
-### SEC-03 — Sekrety zapisane w kodzie i niebezpieczny fallback JWT — wysokie
+**Status:** `userId` usunięto z requestu reguły, właściciel jest pobierany z JWT, a test dwóch użytkowników potwierdził `404` przy odczycie cudzej reguły.
+
+### SEC-03 — Sekrety zapisane w kodzie i niebezpieczny fallback JWT — w większości naprawione
 
 **Zagrożenie:** Osoba mająca dostęp do repozytorium może tworzyć tokeny lub uzyskać dostęp do bazy. Fallback pozwala uruchomić aplikację z powszechnie znanym kluczem.
 
@@ -50,7 +54,9 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Usunąć sekrety ze śledzonych plików, użyć secret managera/zmiennych środowiskowych, przerwać start poza Development przy braku sekretów, wymagać losowego klucza minimalnej długości, wykonać rotację i używać osobnych danych dla każdego środowiska.
 
-### SEC-04 — Brak limitowania żądań i blokad uwierzytelniania — wysokie
+**Status:** Bazowy `appsettings.json` nie zawiera już hasła ani klucza JWT, a brak klucza powoduje przerwanie startu. `compose.yml` wymaga `POSTGRES_PASSWORD` z zewnętrznego sekretu i ogranicza port bazy do localhost. Hasło istniejącej instancji PostgreSQL zostało zrotowane i zapisane w zmiennej użytkownika. W produkcji nadal wymagany jest dedykowany secret manager/KMS.
+
+### SEC-04 — Brak limitowania żądań i blokad uwierzytelniania — częściowo naprawione
 
 **Zagrożenie:** Logowanie i rejestrację można atakować brute force, spamować lub wykorzystywać do wyczerpania zasobów.
 
@@ -58,7 +64,9 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Dodać rate limiting per IP i identyfikator konta, wykładnicze opóźnienie/tymczasową blokadę, limity body, monitoring i alerty. Zachować ogólne komunikaty błędów, aby nie umożliwiać enumeracji e-maili.
 
-### SEC-05 — Niebezpieczny cykl życia JWT i przechowywanie w przeglądarce — wysokie
+**Status:** Dodano rate limiting per IP dla rejestracji i logowania oraz blokadę po 5 błędnych próbach na 15 minut z informacją o czasie ponowienia. Mechanizm działa w pamięci pojedynczej instancji; dla wielu instancji należy przenieść stan do Redis/bazy i dodać monitoring oraz alerty.
+
+### SEC-05 — Niebezpieczny cykl życia JWT i przechowywanie w przeglądarce — nadal wysokie
 
 **Zagrożenie:** Tokeny są ważne osiem godzin, nie mają odświeżania, unieważniania ani rotacji i są zapisane w `localStorage`. Każdy XSS lub przejęty skrypt może wyprowadzić token bearer.
 
@@ -66,7 +74,9 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Stosować krótkie tokeny dostępowe (5–15 minut) oraz rotowane, haszowane tokeny odświeżające przechowywane po stronie serwera. Preferować sesję przez HttpOnly, Secure, SameSite cookie lub BFF.
 
-### SEC-06 — Brak wymuszenia HTTPS — wysokie
+**Status:** Do wykonania. Aplikacja nadal używa `localStorage`; nie wdrożono jeszcze refresh-tokenów ani BFF.
+
+### SEC-06 — Brak wymuszenia HTTPS — częściowo naprawione
 
 **Zagrożenie:** Dane logowania, JWT i dane finansowe mogą zostać przechwycone lub zmodyfikowane przez HTTP.
 
@@ -74,7 +84,9 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Zakończyć TLS na zaufanym reverse proxy lub Kestrel, przekierowywać HTTP do HTTPS, włączyć HSTS wyłącznie w produkcji i używać adresów HTTPS API.
 
-### SEC-07 — Nielimitowany upload i import CSV — wysokie
+**Status:** Dodano `UseHttpsRedirection()` i `UseHsts()` poza Development. Certyfikat TLS i reverse proxy nadal wymagają konfiguracji wdrożeniowej.
+
+### SEC-07 — Nielimitowany upload i import CSV — częściowo naprawione
 
 **Zagrożenie:** Duże lub uszkodzone pliki mogą wyczerpać pamięć/CPU. Brakuje limitów rozmiaru, wierszy, pól, czasu i przestrzeni.
 
@@ -82,17 +94,23 @@ Aplikacja nie jest gotowa do publicznego wdrożenia produkcyjnego. Najważniejsz
 
 **Poprawka:** Wprowadzić limity multipart, pliku, wierszy, kolumn i długości pól, walidację rozszerzenia i typu, timeouty, limity per użytkownik oraz parser strumieniowy. Nie ufać `fileName` przy ścieżkach plików.
 
-### SEC-08 — Brak nagłówków bezpieczeństwa i polityki błędów — średnie
+**Status:** Dodano limit 10 MB, ograniczenie do CSV, limity formularza, limit mapowania JSON i `MaxDepth`. Parser czyta plik wiersz po wierszu oraz ogranicza import do 100 000 wierszy, 100 kolumn i 4096 znaków pola. Wynik parsera nadal jest materializowany do listy, więc pełne przetwarzanie end-to-end streaming oraz quota/timeout per użytkownik pozostają do wykonania.
+
+### SEC-08 — Brak nagłówków bezpieczeństwa i polityki błędów — naprawione częściowo
 
 Brakuje CSP, ochrony przed framingiem, `nosniff`, polityki referrera i Permissions Policy. Dodać `Content-Security-Policy`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, `frame-ancestors`/`X-Frame-Options` oraz ogólny handler błędów produkcyjnych.
 
-### SEC-09 — Swagger dostępny w każdym środowisku — średnie
+**Status:** Dodano wszystkie wymienione nagłówki oraz globalny `UseExceptionHandler` z `ProblemDetails`. CSP jest obecnie bardzo restrykcyjna i wymaga weryfikacji z pełnym frontendem.
+
+### SEC-09 — Swagger dostępny w każdym środowisku — naprawione
 
 **Zagrożenie:** Publiczny schemat API ułatwia mapowanie aplikacji.
 
 **Miejsce:** `src/backend/Api/Program.cs:68-75`.
 
 **Poprawka:** Włączać Swagger tylko w Development albo chronić go sieciowo/autoryzacją.
+
+**Status:** Swagger jest uruchamiany wyłącznie w Development.
 
 ### SEC-10 — CORS nieprzygotowany do produkcji — średnie
 
@@ -131,18 +149,18 @@ Frontend odwołuje się do stałego URL NBP, więc nie jest to obecnie SSRF ster
 | Path Traversal            | Nie znaleziono ścieżki pliku budowanej z danych użytkownika.                                            |
 | Command Injection         | Nie znaleziono wykonywania procesów/powłoki.                                                            |
 | Deserialization           | JSON mapowania użytkownika wymaga limitów rozmiaru, głębokości i liczby elementów.                      |
-| File Upload               | Wysokie ryzyko z powodu braku limitów i parsera ograniczonego pamięcią.                                 |
+| File Upload               | Limity pliku, formularza i CSV dodane; pełny streaming, quota i timeout nadal wymagane.                 |
 | Authentication            | Logowanie/rejestracja istnieją, ale brakuje rate limitingu i blokad.                                    |
 | Authorization             | Potwierdzono IDOR w transakcjach i regułach kategorii.                                                  |
 | JWT                       | Walidacja podpisu działa, ale fallback sekretu, długi czas życia i brak rotacji są ryzykiem.            |
 | Refresh Token             | Nie znaleziono endpointu ani magazynu tokenów odświeżających.                                           |
-| CORS                      | Lokalne originy są lepsze niż wildcard, ale konfiguracja produkcyjna jest nieobecna.                    |
+| CORS                      | Konfigurowalna allowlista, fail-closed poza Development i ograniczone metody/nagłówki.                 |
 | Cookies                   | Nie znaleziono cookies auth; przy migracji użyć HttpOnly/Secure/SameSite.                               |
-| Nagłówki bezpieczeństwa   | Nie są skonfigurowane; zob. SEC-08.                                                                     |
-| HTTPS                     | Nie jest wymuszane; zob. SEC-06.                                                                        |
-| Rate limiting/brute force | Nie jest skonfigurowane; zob. SEC-04.                                                                   |
+| Nagłówki bezpieczeństwa   | Skonfigurowane w middleware; CSP wymaga testów z frontendem.                                            |
+| HTTPS                     | Redirect i HSTS poza Development; certyfikat/reverse proxy pozostają do konfiguracji.                  |
+| Rate limiting/brute force | Rate limiting per IP dodany dla auth; brak blokady konta i backoffu.                                    |
 | Haszowanie haseł          | PBKDF2 ze stałym kosztem i bez wersjonowania; zob. SEC-11.                                              |
-| Wycieki sekretów          | Hasło bazy, klucz JWT i lokalny URL API są w konfiguracji; zob. SEC-03.                                 |
+| Wycieki sekretów          | Bazowe sekrety usunięte; Compose wymaga zewnętrznego hasła. Rotacja istniejącej bazy nadal wymagana.     |
 | Zmienne środowiskowe      | `.env.local` jest tylko deweloperskie, a sekrety backendu nie są zewnętrzne.                            |
 | Logowanie                 | Zapisywane są tytuły importów; należy je ograniczyć i chronić.                                          |
 | IDOR                      | Potwierdzono w `TransactionsController.GetById` i regułach kategorii.                                   |
@@ -151,11 +169,11 @@ Frontend odwołuje się do stałego URL NBP, więc nie jest to obecnie SSRF ster
 
 | Kategoria OWASP                                | Status                                                                    |
 | ---------------------------------------------- | ------------------------------------------------------------------------- |
-| A01 Broken Access Control                      | Wysokie — SEC-01 i SEC-02.                                                |
+| A01 Broken Access Control                      | Poprawione dla SEC-01/SEC-02; wymagane dalsze testy endpointów powiązanych ID. |
 | A02 Cryptographic Failures                     | Wysokie — sekrety, HTTP i token localStorage.                             |
 | A03 Injection                                  | Nie znaleziono SQL/command injection; walidować JSON i pliki.             |
 | A04 Insecure Design                            | Wysokie — brak kontroli nadużyć, limitów uploadu i unieważniania tokenów. |
-| A05 Security Misconfiguration                  | Wysokie — Swagger, nagłówki, HTTPS i domyślne ustawienia.                 |
+| A05 Security Misconfiguration                  | Częściowo poprawione — Swagger, nagłówki, HTTPS middleware i CORS dodane; certyfikat wymaga wdrożenia. |
 | A06 Vulnerable and Outdated Components         | Wymaga skanera zależności/SBOM.                                           |
 | A07 Identification and Authentication Failures | Wysokie — brute force, długi JWT, brak refresh/revocation.                |
 | A08 Software and Data Integrity Failures       | Średnie — dodać skanowanie lockfile/SBOM i podpisy artefaktów CI.         |
@@ -164,7 +182,7 @@ Frontend odwołuje się do stałego URL NBP, więc nie jest to obecnie SSRF ster
 
 ## Bramka produkcyjna
 
-Nie publikować aplikacji, dopóki co najmniej SEC-01–SEC-07 nie zostaną poprawione i zweryfikowane automatycznymi testami dwóch użytkowników. Przed startem wymagane są również TLS, rotacja sekretów, produkcyjny CORS, rate limiting, limity uploadu, nagłówki bezpieczeństwa, kontrolowany Swagger, skanowanie CVE, backupy bazy, monitoring oraz zewnętrzny uwierzytelniony test penetracyjny.
+Nie publikować aplikacji, dopóki SEC-05 i pozostałe elementy SEC-03–SEC-07 nie zostaną domknięte i zweryfikowane. Testy dwóch użytkowników wykonano dla transakcji i reguł kategorii. Przed startem wymagane są TLS z certyfikatem, secret manager, produkcyjny CORS, rozproszona blokada brute force, pełny streaming uploadu, skanowanie CVE, backupy, monitoring i zewnętrzny test penetracyjny.
 
 ## Zalecane polecenia weryfikacyjne
 
@@ -180,6 +198,14 @@ npm run build
 Dodać testy dynamiczne: odczyt transakcji innego użytkownika, CRUD reguł kategorii, uszkodzone/za duże uploady, throttling logowania, wygasłe i zmodyfikowane JWT, originy CORS, brak sekretów produkcyjnych, nagłówki bezpieczeństwa i przekierowania HTTPS.
 
 ## Wyniki wykonania audytu
+
+- Test izolacji danych dwóch użytkowników: **zaliczony** — odczyt cudzej transakcji i reguły kategorii zwraca `404`.
+- Nagłówki bezpieczeństwa: **potwierdzone** na `/health` — CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` i `Permissions-Policy`.
+- Globalna obsługa błędów: **wdrożona** przez `AddProblemDetails()` i `UseExceptionHandler()`.
+- Rotacja hasła PostgreSQL: **wykonana** przez `ALTER ROLE`; sekret nie został zapisany w repozytorium.
+- Ochrona brute force: **wdrożona częściowo** — rate limiting per IP oraz blokada 5 prób/15 minut.
+- Parser CSV: **wdrożone limity** — 10 MB, 100 000 wierszy, 100 kolumn, 4096 znaków pola; wynik nadal jest materializowany.
+- CORS: **wdrożony** przez `Cors:AllowedOrigins`, z fail-closed poza Development.
 
 - `dotnet test Backend.sln --configuration Release --no-restore`: **niepowodzenie** — 2 istniejące testy parsera oczekują `Lista_operacji_20260712_205807.csv` w katalogu głównym, a plik znajduje się w `attachments/old/`. To problem fixture/ścieżki testowej, nie pozytywny wynik bezpieczeństwa.
 - `npm run lint`: zakończone 4 ostrzeżeniami i 0 błędów. Dotyczą brakującej zależności efektu React, optymalizacji `<img>` i anonimowych eksportów konfiguracji.

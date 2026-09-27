@@ -13,6 +13,8 @@ npm-debug.log*
 # Local logs and environment files
 *.log
 src/frontend/.env.local
+.env
+secrets/
 
 # IDE and OS files
 .vs/

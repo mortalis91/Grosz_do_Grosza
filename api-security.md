@@ -14,6 +14,8 @@ Większość kontrolerów biznesowych ma `[Authorize]`, a większość operacji 
 - Logowanie i rejestracja są anonimowe, ale nie mają rate limitingu ani ochrony przed enumeracją.
 - Walidacja jest głównie ręczna i niepełna; limity uploadu i zapytań są niewystarczające.
 
+Wdrożono już część poprawek: ownership transakcji, reguł kategorii, kategorii nadrzędnych i budżetów, limity importu CSV, konfigurowalny CORS, rate limiting oraz blokadę logowania po nieudanych próbach.
+
 ## Inwentaryzacja endpointów
 
 ### Uwierzytelnianie — `/api/v1/auth`
@@ -24,6 +26,8 @@ Większość kontrolerów biznesowych ma `[Authorize]`, a większość operacji 
 | `POST /login` | Nie | Nie dotyczy | Ogólny komunikat błędu, ale brak throttlingu, blokady i ochrony przed brute force. Token bearer ważny 8 godzin. | Wysokie |
 
 **Wymagane zmiany:** rate limiting, serwerowe ograniczenia DTO, jednolita odpowiedź rejestracji, krótkie tokeny dostępowe i refresh tokeny.
+
+**Aktualny status:** rate limiting działa per IP, a dodatkowa blokada konta po 5 nieudanych próbach trwa 15 minut. Stan blokady jest przechowywany w pamięci procesu. Przy wielu instancjach backendu należy przenieść go do współdzielonego Redis lub bazy, aby każda instancja widziała te same próby i blokady.
 
 ### Konta — `/api/v1/accounts`
 
@@ -47,6 +51,8 @@ Większość kontrolerów biznesowych ma `[Authorize]`, a większość operacji 
 | `GET /{id}` | Tak | Poprawny filtr właściciela. | Niskie |
 | `PUT /{id}` | Tak | `ParentId` może wskazać kategorię innego użytkownika. | Średnie |
 | `POST /{id}/archive` | Tak | Poprawna kontrola; trzeba walidować zmiany kategorii systemowych. | Niskie/średnie |
+
+**Aktualny status:** `ParentId` jest sprawdzany pod kątem przynależności do bieżącego użytkownika przy tworzeniu i edycji.
 
 ### Reguły kategorii — `/api/v1/category-rules`
 
@@ -96,6 +102,8 @@ Endpointy mają `[Authorize]`. Budżet jest ograniczony do użytkownika, ale two
 
 **Ryzyko:** niskie/średnie dla odczytu i usuwania, średnie dla tworzenia.
 
+**Aktualny status:** tworzenie budżetu sprawdza właściciela kategorii, zakres roku/miesiąca, walutę i maksymalną kwotę.
+
 ### Użytkownicy — `/api/v1/user`
 
 `DELETE /` korzysta wyłącznie z ID użytkownika z JWT i nie przyjmuje arbitralnego ID. Trwale usuwa użytkownika oraz wiele powiązanych danych.
@@ -124,6 +132,8 @@ Logowanie używa ogólnego błędu, ale rejestracja rozróżnia „e-mail już i
 
 API używa nagłówka `Authorization`, a nie cookies, więc klasyczne CSRF jest ograniczone. Przy przejściu na cookies dodać antiforgery oraz SameSite/Secure/HttpOnly. Produkcyjny CORS konfigurować przez allowlistę, nie przez hard-coded localhost.
 
+**Aktualny status CORS:** allowlista jest pobierana z `Cors:AllowedOrigins`, poza Development obowiązuje zasada fail-closed, a dozwolone metody i nagłówki są ograniczone.
+
 ## Kolejność poprawek według priorytetu
 
 1. Dodać filtr właściciela do `TransactionsController.GetById`.
@@ -134,3 +144,14 @@ API używa nagłówka `Authorization`, a nie cookies, więc klasyczne CSRF jest 
 6. Wprowadzić limity uploadu i parser ograniczony zasobami.
 7. Zrotować sekrety, wymusić konfigurację produkcyjną, HTTPS i ograniczyć Swagger.
 8. Dodać automatyczne testy autoryzacji dwóch użytkowników dla każdej trasy.
+
+## Status po wdrożonych poprawkach
+
+- Odczyt cudzej transakcji: filtr `UserId` dodany i zweryfikowany testem dwóch użytkowników.
+- Reguły kategorii: właściciel wyznaczany z JWT, usunięto sterowanie `userId` przez klienta.
+- Kategorie nadrzędne i budżety: walidacja właściciela powiązanych `CategoryId`/`ParentId` dodana.
+- Import CSV: limity rozmiaru, wierszy, kolumn i długości pól dodane; parser czyta plik wierszami, ale wynik jest jeszcze materializowany do listy.
+- CORS: konfiguracja środowiskowa i fail-closed dodane.
+- Rate limiting: dodany dla logowania i rejestracji.
+- Blokada brute force: 5 nieudanych prób powoduje blokadę na 15 minut w ramach jednej instancji procesu; Redis jest wymagany przy skalowaniu horyzontalnym.
+- Nadal do wykonania: HttpOnly cookie/BFF, refresh tokeny, pełne testy integracyjne endpointów i rozproszony magazyn blokad.

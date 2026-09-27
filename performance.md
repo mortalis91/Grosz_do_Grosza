@@ -15,6 +15,13 @@ Najważniejsze optymalizacje:
 4. rozbić duży `transactions-list.tsx` na ładowane warunkowo komponenty oraz dodać wirtualizację dla dużych tabel;
 5. poprawić ostrzeżenie `useEffect` i zastąpić `<img>` przez `next/image`.
 
+### Status wdrożenia
+
+- Agregacja budżetów została przeniesiona do SQL `GroupBy`, zamiast wykonywania `Where(...).Sum(...)` dla każdego elementu.
+- `refresh` w `app/budgets/page.tsx` używa `useCallback`, a `useEffect` ma poprawną zależność.
+- Dodano walidację zakresów i ograniczenia splitów oraz budżetów opisane w raporcie API.
+- `next/image` powodował błąd odczytu pliku Next.js przez OneDrive (`os error 362`), dlatego tymczasowo pozostawiono `<img>`. Należy ponowić zmianę po zapewnieniu pełnej dostępności `node_modules`.
+
 ## Wyniki builda frontendu
 
 Polecenie `npm run build` zakończyło się kodem 0.
@@ -45,11 +52,11 @@ Kontrolery używają projekcji `Select`, `AsNoTracking`, paginacji i zapytań zb
 
 ### Miejsca wymagające optymalizacji
 
-#### `BudgetsController`
+#### `BudgetsController` — poprawione
 
-Aktualna logika pobiera transakcje do pamięci, a następnie dla każdego `budgetItem` wykonuje LINQ `transactions.Where(...).Sum(...)` w pamięci. Przy `B` elementach budżetu i `T` transakcjach jest to około O(B×T).
+Wcześniejsza logika pobierała transakcje do pamięci i dla każdego `budgetItem` wykonywała LINQ `transactions.Where(...).Sum(...)`. Zastąpiono ją agregacją `GroupBy` po stronie SQL i jednym słownikiem wyników.
 
-Zalecenie: najpierw wykonać agregację po `CategoryId` w SQL (`GroupBy` + `Sum`), pobrać słownik wyników i wykonać jedno przejście po elementach budżetu. Kwoty zwrotów również agregować po stronie bazy.
+Kwoty zwrotów są uwzględniane w zapytaniu przez left join. Pozostaje zweryfikować plan `EXPLAIN ANALYZE` na danych produkcyjnych.
 
 #### `DashboardController`
 
