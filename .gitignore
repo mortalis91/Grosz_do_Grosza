@@ -11,6 +11,7 @@ npm-debug.log*
 **/obj/
 
 # Local logs and environment files
+attachments/
 *.log
 src/frontend/.env.local
 .env

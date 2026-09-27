@@ -870,7 +870,7 @@ export function TransactionsList() {
               <button
                 type="button"
                 onClick={() => setTypeFilterOpen(!typeFilterOpen)}
-                className="rounded-xl border border-line bg-panel px-3 py-2 text-sm"
+                className="inline-flex min-w-48 items-center justify-between gap-2 whitespace-nowrap rounded-xl border border-line bg-panel px-3 py-2 text-sm"
               >
                 Typ:{" "}
                 {selectedTypeFilters.length ? "Transakcje..." : "wszystkie"}{" "}
