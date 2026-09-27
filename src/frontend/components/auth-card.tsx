@@ -7,7 +7,7 @@ import { saveToken } from "@/lib/session";
 
 type Mode = "login" | "register";
 const baseUrl =
-  process.env.NEXT_PUBLIC_BACKEND_API_URL ?? "http://localhost:5211";
+  process.env.NEXT_PUBLIC_BACKEND_API_URL ?? "http://localhost:5000";
 
 export function AuthCard() {
   const router = useRouter();

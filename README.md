@@ -106,6 +106,17 @@ Frontend korzysta domyślnie z API pod `http://localhost:5000`. Można zmienić 
 adres, ustawiając zmienną środowiskową `NEXT_PUBLIC_BACKEND_API_URL` w pliku
 `src/frontend/.env.local`.
 
+### Diagnostyka połączenia z API
+
+Jeżeli frontend wyświetla komunikat o braku połączenia z API, sprawdź:
+
+- czy backend odpowiada pod `http://localhost:5000/health` i zwraca status `200`;
+- czy `NEXT_PUBLIC_BACKEND_API_URL` nie wskazuje na nieużywany port, np. `5211`;
+- czy po zmianie adresu API frontend został uruchomiony ponownie.
+
+Wartość `NEXT_PUBLIC_BACKEND_API_URL` musi wskazywać adres backendu, np.
+`http://localhost:5000`.
+
 ### Kontrole jakości kodu
 
 Polecenia uruchamiające sprawdzanie i formatowanie frontendu:
