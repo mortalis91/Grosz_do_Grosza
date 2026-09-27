@@ -87,8 +87,13 @@ W drugim terminalu, również w katalogu głównym projektu:
 dotnet run --project src/backend/Api/GroszDoGrosza.Api.csproj
 ```
 
-API będzie dostępne pod adresem `http://localhost:5000`, a dokumentacja Swagger
-pod `http://localhost:5000/swagger`.
+API będzie dostępne pod adresem `http://localhost:5000`. Dokumentacja Swagger
+jest dostępna pod `http://localhost:5000/swagger` po uruchomieniu z
+`ASPNETCORE_ENVIRONMENT=Development`.
+
+Jeżeli zmienna `ConnectionStrings__DefaultConnection` jest ustawiona, ma
+pierwszeństwo przed wartością z `appsettings.json`. Hasło inicjalizacyjne
+`POSTGRES_PASSWORD` nie zmienia hasła w już istniejącym wolumenie PostgreSQL.
 
 ### 3. Uruchom frontend
 
@@ -116,6 +121,11 @@ Jeżeli frontend wyświetla komunikat o braku połączenia z API, sprawdź:
 
 Wartość `NEXT_PUBLIC_BACKEND_API_URL` musi wskazywać adres backendu, np.
 `http://localhost:5000`.
+
+Nieudane logowanie zwraca `401 Unauthorized` i jest wyświetlane jako
+`Nieprawidłowy e-mail lub hasło.`. Komunikat `Nie można połączyć się z serwerem
+API.` oznacza błąd transportu, CORS albo nieosiągalny adres skonfigurowany w
+`NEXT_PUBLIC_BACKEND_API_URL`.
 
 ### Kontrole jakości kodu
 
