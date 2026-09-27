@@ -1,18 +1,18 @@
 # Przegląd bezpieczeństwa frontendu Next.js
 
-Date: 2026-08-05  
-Scope: `src/frontend`, including App Router pages, client components, environment configuration and `package-lock.json`.  
-Method: static search plus `npm audit --omit=dev --json`, lint and production build. No browser penetration test or deployed-host test was performed.
+Data: 2026-08-05  
+Zakres: `src/frontend`, w tym strony App Router, komponenty klienckie, konfiguracja środowiska i `package-lock.json`.  
+Metoda: wyszukiwanie statyczne oraz `npm audit --omit=dev --json`, lintowanie i kompilacja produkcyjna. Nie wykonano testu penetracyjnego w przeglądarce ani testu wdrożonego hosta.
 
 ## Podsumowanie zarządcze
 
-The codebase has no obvious `dangerouslySetInnerHTML`, `innerHTML`, `eval`, `Function` or direct cookie usage. React's normal escaping is currently protective. The main production blockers are:
+W bazie kodu nie znaleziono oczywistego użycia `dangerouslySetInnerHTML`, `innerHTML`, `eval`, `Function` ani bezpośredniej obsługi ciasteczek. Standardowe escapowanie Reacta zapewnia obecnie ochronę. Główne blokery wdrożenia produkcyjnego to:
 
-1. The frontend stores the JWT in `localStorage`, so any future XSS or compromised client-side dependency can steal the bearer token.
-2. `next@15.3.3` is outdated and `npm audit` reports 1 critical and 2 high production dependency findings, with a fix available at `next@15.5.22`.
-3. No CSP, clickjacking protection or other browser security headers are configured in `next.config.mjs` or the root layout.
-4. The API base URL is exposed through `NEXT_PUBLIC_*`; this is not a secret, but production must use HTTPS and an allowlisted origin.
-5. A fixed third-party NBP request is made directly from the browser, increasing privacy/availability and supply-chain exposure.
+1. Frontend przechowuje JWT w `localStorage`, więc przyszły atak XSS lub przejęta zależność po stronie klienta może wykraść token bearer.
+2. `next@15.3.3` jest nieaktualny, a `npm audit` zgłasza 1 krytyczne i 2 poważne problemy w zależnościach produkcyjnych; poprawka jest dostępna w `next@15.5.22`.
+3. W `next.config.mjs` ani w głównym layoucie nie skonfigurowano CSP, ochrony przed clickjackingiem ani innych nagłówków bezpieczeństwa przeglądarki.
+4. Bazowy adres API jest ujawniany przez `NEXT_PUBLIC_*`; nie jest to sekret, ale produkcja musi używać HTTPS i adresu z listy dozwolonych.
+5. Przeglądarka wykonuje bezpośrednie zapytanie do zewnętrznego serwisu NBP, zwiększając ryzyko dotyczące prywatności, dostępności i łańcucha dostaw.
 
 ## Ustalenia i poprawki
 

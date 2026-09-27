@@ -2,16 +2,16 @@
 
 ## Cele
 
-The database must support:
+Baza danych musi obsługiwać:
 
-- multi-account personal finance tracking
-- transaction import and deduplication
-- budget planning and reporting
-- investment and asset tracking
-- hierarchical categories and automated rules
-- auditability and future integrations
+- zarządzanie finansami osobistymi z wieloma kontami
+- import transakcji i usuwanie duplikatów
+- planowanie budżetu i raportowanie
+- śledzenie inwestycji i majątku
+- hierarchiczne kategorie i reguły automatyczne
+- audytowalność i przyszłe integracje
 
-The model is designed for PostgreSQL and EF Core.
+Model jest przeznaczony dla PostgreSQL i EF Core.
 
 ## Zasady projektowe
 

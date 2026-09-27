@@ -1,57 +1,58 @@
 # Grosz do Grosza
 
-Personal Finance Manager built with:
+Menedżer finansów osobistych zbudowany przy użyciu:
 
 - ASP.NET Core 10 backend
 - Next.js 15 frontend
 - PostgreSQL
 
-## Current status
+## Aktualny stan
 
-- Authentication with JWT and protected API calls is implemented.
-- PostgreSQL persistence and EF Core migrations are implemented.
-- Accounts support bank, brokerage, deposit and pension account types, currencies and current balances.
-- Transactions support manual entry, CSV import, categorization, filtering, sorting, editing, soft deletion and bulk actions.
-- Transaction filtering displays a summary for all filtered results, including transaction count, expenses, income and net balance grouped by currency.
-- Manual transaction creation and editing open in a modal window. The modal can be closed with the `X` button or by clicking outside it; after saving, it closes automatically. The action labels are `Dodaj transakcję` and `Zapisz zmiany`. Category pickers use an independent scrollable layer and open upward when needed.
-- Categories support groups, subcategories, icons, colors, editing, alphabetical ordering and deletion.
-- Dashboard supports monthly summaries, annual charts and PLN conversion for non-PLN balances.
-- The `Przychody vs Wydatki` chart supports day, week, month, year and all-time ranges. Transactions marked as `Ignored` are excluded from its calculations.
-- Import diagnostics report imported rows, duplicates and failed rows.
-- CSV import requires selecting an account first; after import the selected file name is shown and a detailed `.txt` log can be downloaded.
-- Budgets support monthly category planning, comments, actual spending, remaining amounts and deletion.
-- Expenses can be linked to income transactions representing refunds.
-- Expenses can be split into child transactions with separate categories, amounts and descriptions. Child amounts must sum to the parent expense amount.
-- Linked refunds are represented as child rows in the transaction list and reduce the expense used in dashboard and reporting calculations.
-- Reports include a separate `Planowanie` section with the `Budżet mieszkaniowy` report.
-- The housing budget reports average monthly net income and basic living costs, accepts planned housing costs, applies a configurable safety buffer and calculates the amount remaining after the planned purchase.
-- Basic living costs use available categories: `Spożywcze`, `Chemia`, `Zdrowie` and its subcategories, `Komórka`, `Internet`, `Zwierzęta` and its subcategories, `Edukacja` and its subcategories, `Rozrywka` and its subcategories, `Odzież i obuwie`, and current rent from `Czynsz i wynajem`.
-- For the current year, monthly averages are divided by the number of months already started; completed years use all 12 months. The planning report supports selecting another year.
+- Zaimplementowano uwierzytelnianie JWT oraz chronione wywołania API.
+- Zaimplementowano persystencję PostgreSQL i migracje EF Core.
+- Konta obsługują rachunki bankowe, maklerskie, lokaty i emerytalne, waluty oraz bieżące salda.
+- Transakcje obsługują ręczne dodawanie, import CSV, kategoryzację, filtrowanie, sortowanie, edycję, miękkie usuwanie i operacje zbiorcze.
+- Filtrowanie transakcji wyświetla podsumowanie wszystkich wyników, w tym liczbę transakcji, wydatki, przychody i saldo netto pogrupowane według waluty.
+- Ręczne dodawanie i edycja transakcji odbywają się w oknie modalnym. Można je zamknąć przyciskiem `X` lub kliknięciem poza oknem; po zapisaniu zamyka się automatycznie. Etykiety akcji to `Dodaj transakcję` i `Zapisz zmiany`. Pickery kategorii używają niezależnej przewijanej warstwy i w razie potrzeby otwierają się do góry.
+- Kategorie obsługują grupy, podkategorie, ikony, kolory, edycję, sortowanie alfabetyczne i usuwanie.
+- Panel główny obsługuje podsumowania miesięczne, wykresy roczne i przeliczanie sald nie-PLN na PLN.
+- Wykres `Przychody vs Wydatki` obsługuje zakresy: dzień, tydzień, miesiąc, rok i cały okres. Transakcje oznaczone jako `Ignored` są wykluczane z obliczeń.
+- Diagnostyka importu raportuje zaimportowane wiersze, duplikaty i wiersze zakończone błędem.
+- Przed importem CSV trzeba wybrać konto; po imporcie wyświetlana jest nazwa pliku, a szczegółowy log `.txt` można pobrać.
+- Budżety obsługują miesięczne planowanie według kategorii, komentarze, rzeczywiste wydatki, pozostałe kwoty i usuwanie.
+- Wydatki można łączyć z transakcjami przychodowymi reprezentującymi zwroty.
+- Wydatki można dzielić na transakcje podrzędne z osobnymi kategoriami, kwotami i opisami. Suma kwot podrzędnych musi być równa kwocie wydatku nadrzędnego.
+- Powiązane zwroty są reprezentowane jako wiersze podrzędne na liście transakcji i zmniejszają wydatek używany w panelu głównym oraz raportach.
+- Raporty zawierają osobną sekcję `Planowanie` z raportem `Budżet mieszkaniowy`.
+- Budżet mieszkaniowy raportuje średni miesięczny dochód netto i podstawowe koszty życia, przyjmuje planowane koszty mieszkania, stosuje konfigurowalny bufor bezpieczeństwa i oblicza kwotę pozostałą po planowanym zakupie.
+- Podstawowe koszty życia korzystają z dostępnych kategorii: `Spożywcze`, `Chemia`, `Zdrowie` i jej podkategorie, `Komórka`, `Internet`, `Zwierzęta` i jej podkategorie, `Edukacja` i jej podkategorie, `Rozrywka` i jej podkategorie, `Odzież i obuwie` oraz bieżący czynsz z `Czynsz i wynajem`.
+- Dla bieżącego roku średnie miesięczne dzielone są przez liczbę rozpoczętych miesięcy; dla lat zakończonych używane jest 12 miesięcy. Raport planowania pozwala wybrać inny rok.
 
-Detailed functional requirements and current behavior are documented in [`REQUIREMENTS.md`](REQUIREMENTS.md).
+Szczegółowe wymagania funkcjonalne i bieżące zachowanie opisano w pliku [`REQUIREMENTS.md`](REQUIREMENTS.md).
 
-## Backend structure
+## Struktura backendu
 
 - `src/backend/Api`
 - `src/backend/Application`
 - `src/backend/Domain`
 - `src/backend/Infrastructure`
 
-## Next step
+## Następny krok
 
-Continue with automated tests for the implemented transaction import, filtering,
-categorization, dashboard rules and the housing planning report. PDF export of the
-planning report and persistent storage of planned housing costs remain future work.
+Należy kontynuować prace nad testami automatycznymi zaimplementowanego importu
+transakcji, filtrowania, kategoryzacji, reguł panelu głównego i raportu planowania
+mieszkaniowego. Eksport raportu planowania do PDF oraz trwałe przechowywanie
+planowanych kosztów mieszkania pozostają pracami na przyszłość.
 
-## Local PostgreSQL
+## Lokalny PostgreSQL
 
-Start the database with Podman Desktop or from the terminal:
+Uruchom bazę danych w Podman Desktop lub z terminala:
 
 ```bash
 podman compose up -d
 ```
 
-The backend uses:
+Backend korzysta z:
 
 - host: `localhost`
 - port: `5432`
