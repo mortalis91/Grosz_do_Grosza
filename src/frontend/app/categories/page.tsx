@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -183,6 +183,7 @@ const childDefaults: Record<string, string[]> = {
 
 export default function CategoriesPage() {
   const [items, setItems] = useState<Category[]>([]);
+  const loadStarted = useRef(false);
   const [groupName, setGroupName] = useState("");
   const [childName, setChildName] = useState("");
   const [childParent, setChildParent] = useState<string | null>(null);
@@ -234,6 +235,8 @@ export default function CategoriesPage() {
     }
   }
   useEffect(() => {
+    if (loadStarted.current) return;
+    loadStarted.current = true;
     load();
   }, []);
 
@@ -282,11 +285,20 @@ export default function CategoriesPage() {
     setEditingGroup(null);
     await load();
   }
-  const groups = items
+  const uniqueItems = Array.from(
+    items.reduce((result, item) => {
+      const key = `${item.parentId ?? "root"}:${item.name.trim().toLocaleLowerCase("pl")}`;
+      if (!result.has(key) || (result.get(key)?.isArchived && !item.isArchived)) {
+        result.set(key, item);
+      }
+      return result;
+    }, new Map<string, Category>()).values(),
+  );
+  const groups = uniqueItems
     .filter((x) => !x.parentId && !x.isArchived)
     .sort((a, b) => a.name.localeCompare(b.name, "pl"));
   const children = (parentId: string) =>
-    items
+    uniqueItems
       .filter((x) => x.parentId === parentId && !x.isArchived)
       .sort((a, b) => a.name.localeCompare(b.name, "pl"));
 

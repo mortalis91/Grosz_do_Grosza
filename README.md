@@ -15,6 +15,8 @@ Menedżer finansów osobistych zbudowany przy użyciu:
 - Filtrowanie transakcji wyświetla podsumowanie wszystkich wyników, w tym liczbę transakcji, wydatki, przychody i saldo netto pogrupowane według waluty.
 - Ręczne dodawanie i edycja transakcji odbywają się w oknie modalnym. Można je zamknąć przyciskiem `X` lub kliknięciem poza oknem; po zapisaniu zamyka się automatycznie. Etykiety akcji to `Dodaj transakcję` i `Zapisz zmiany`. Pickery kategorii używają niezależnej przewijanej warstwy i w razie potrzeby otwierają się do góry.
 - Kategorie obsługują grupy, podkategorie, ikony, kolory, edycję, sortowanie alfabetyczne i usuwanie.
+- Inicjalizacja kategorii jest wykonywana idempotentnie, a widok nie wyświetla
+  powtórzonych nazw grup ani podkategorii w obrębie tego samego rodzica.
 - Panel główny obsługuje podsumowania miesięczne, wykresy roczne i przeliczanie sald nie-PLN na PLN.
 - Wykres `Przychody vs Wydatki` obsługuje zakresy: dzień, tydzień, miesiąc, rok i cały okres. Transakcje oznaczone jako `Ignored` są wykluczane z obliczeń.
 - Diagnostyka importu raportuje zaimportowane wiersze, duplikaty i wiersze zakończone błędem.
